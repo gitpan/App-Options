@@ -1,6 +1,11 @@
 
 use Module::Build;
 
+# NOTE: If anyone knows why the CPAN shell does "perl Build.PL Build",
+# forcing me to put this next line (hack) in, please let me know.
+#   stephen.adkins@officevision.com
+shift(@ARGV) if ($#ARGV > -1 && $ARGV[0] eq "Build");
+
 # Enable the continued use of the PREFIX=$PREFIX option
 # (from Makefile.PL and ExtUtils::MakeMaker) by making it
 # an alias for the "install_base" option of Module::Build.

@@ -2,6 +2,9 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.95
+ x made a change (hack) to Build.PL to get it to work with the CPAN shell
+
 VERSION 0.94
  x use Module::Build instead of ExtUtils::MakeMaker
  x add a META.yaml file to the distribution (from "Build distmeta")
