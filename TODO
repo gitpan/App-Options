@@ -1,17 +1,24 @@
 ######################################################################
-## File: $Id: TODO,v 1.3 2004/01/19 14:51:40 spadkins Exp $
+## File: $Id: TODO,v 1.4 2004/01/30 15:15:07 spadkins Exp $
 ######################################################################
- o improve documentation
+
+These two items are what will be required to go to version 1.00.
+ o figure out a way to do it outside the BEGIN block (i.e. use App::Options qw(:init))
+
+These are other interesting things
+ o make lots more tests
+ o improve debug_options (env vars, etc.)
  o enforce other option parsing rules (single letter + arg, single/double dash)
  o option aliases/synonyms/alternates (i.e. -s = --silent)
- o "strict" option: 0 = no strictness
-                    1 = [most strict] options from file not defined by program cause errors
-                    2 = silently don't include options from file not defined by program
-                    3 = unknown options cause error (program only can define options)
-                    4 = [slightly strict] unknown options cause error (file can define options),
+ o "secure" attribute
+ o "strict" option:
+       0 = no strictness
+       1 = unknown options cause error (file can define options),
+       2 = [1] + unknown options cause error (program only can define options)
+       3 = [1+2] + silently don't include options from file not defined by program
+       4 = [1+2+3] + options from file not defined by program cause errors
  o write "prefix.pod"
- o figure out a way to do it outside the BEGIN block (i.e. use App::Options qw(:init))
  o here documents, var = <<EOF
- o try use lib "dir"; instead of unshift(@INC,"dir")
+ o try use lib "dir"; instead of unshift(@INC,"dir") (interaction with "arch")
  o consider checking the PERL5LIB variable under -T
 

@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.3 2004/01/19 14:51:41 spadkins Exp $
+## $Id: Options.pm,v 1.4 2004/01/30 15:15:07 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -19,45 +19,43 @@ App::Options - combine command line options, environment vars, and option file v
 
     BEGIN {
         use App::Options;
-        App::Options->init();  # reads into %App::options by default
+        App::Options->init();  # reads option values into %App::options by default
     }
 
-    print "Options:\n";
-    foreach $var (sort keys %App::options) {
-        printf "    %-20s => [%s]\n", $var, $App::options{$var};
-    }
+    # do something with the options (in %App::options)
+    use DBI;
+    $dsn = "dbi:mysql:database=$App::options{dbname}";
+    $dbh = DBI->connect($dsn, $App::options{dbuser}, $App::options{dbpass});
+    ...
 
-  or a more full-featured example...
+  Get help from the command line (assuming program is named "prog") ...
 
-    #!/usr/local/bin/perl
+    prog -?
 
-    BEGIN {
-        use App::Options;
-        App::Options->init(
-            values => \%MyPackage::some_hash,
-            options => [ "option_file", "prefix", "app", "app_path_info",
-                        "perlinc", "debug_options", "import", ],
-            option => {
-                option_file   => "~/.app/app.conf",         # set default
-                app           => "default=app;type=string", # default & type
-                app_path_info => {default=>"",type=>"string"}, # as a hashref
-                prefix        => "type=string;required;env=PREFIX",
-                perlinc       => undef,         # no default
-                debug_options => "type=integer",
-                import        => "type=string",
-                flush_imports => 1,
-            },
-            no_cmd_args => 1,
-            no_env_vars => 1,
-            no_option_file => 1,
-            print_usage => sub { my ($values, $init_options) = @_; print "Use it right!\n"; },
-        );
-    }
+  Option values may be provided on the command line, in environment
+  variables, and option files.  (i.e. $ENV{APP_DBNAME} would set
+  the value of %App::options{dbname} by default.)
 
-    print "Options:\n";
-    foreach $var (sort keys %MyPackage::some_hash) {
-        printf "    %-20s => [%s]\n", $var, $MyPkg::my_hash{$var};
-    }
+  The "dbname" and other options could also be set in one of the
+  following configuration files
+
+    $HOME/.app/prog.conf
+    $HOME/.app/app.conf
+    $PROGDIR/prog.conf
+    $PROGDIR/app.conf
+    $PREFIX/prog.conf
+    $PREFIX/app.conf
+    /etc/app/app.conf
+
+  with a file format like
+
+    [prog]
+    dbname = prod
+    dbuser = scott
+    dbpass = tiger
+
+  See below for a more detailed explanation of these and other
+  advanced features.
 
 =head1 DESCRIPTION
 
@@ -65,27 +63,60 @@ App::Options combines command-line arguments, environment variables,
 option files, and program defaults to produce a hash of
 option values.
 
-All of this may be done within the BEGIN block so that the @INC variable
-can be modified in time to affect "use" statements within the 
-regular code.  This is particularly important to support the installation
-of multiple versions of a Perl application on the same physical computer.
+=head1 RELATION TO OTHER CONFIGURATION/OPTION PARSING MODULES
 
-App::Options supports the P5EE/App-Context variant of the Perl 5 Enterprise
-Environment.  See the P5EE web sites for more information.
+A number of modules are posted on CPAN which do command-line
+processing.
+
+ http://search.cpan.org/modlist/Option_Parameter_Config_Processing
+
+App::Options is different than most of the Getopt::* modules
+because it integrates the processing of command line options,
+environment variables, and config files.
+
+It is different from AppConfig (to which its description bears the
+most resemblance) by its ability to configure a suite of programs
+with a cascading set of configuration files. This allows for a large
+number of programs in a large software system to share a small set
+of configuration files. Some of the option values may be shared, and
+some may be targetted at a single program or a pattern-matched set
+of programs.
+
+Furthermore, its special treatment of the "perlinc"
+option facilitates the inclusion ("use") of application-specific
+perl modules from special places to enable the installation of
+multiple versions of an application on the same system (i.e.
+/usr/myproduct/version).
+
+App::Options is also the easiest command-line processing system
+that I have found anywhere. It then provides a smooth transition to
+more advanced features only as they are needed.  Every single
+quick and dirty script I ever write from now on can afford
+to use App::Options.
+
+The documentation of App::Options takes three
+forms below.
+
+  Reference - describing the API (methods, args)
+  Flow - describing the order and logic of processing
+  Tutorial - describing how to use the API in practical situations
+
+Hopefully these will be complementary and useful, even if they
+are somewhat redundant.
+
+=head1 RELATION TO THE P5EE PROJECT
+
+App::Options was motivated by and supports the P5EE/App-Context variant
+of the Perl 5 Enterprise Environment (P5EE).  However, App::Options has no
+dependency on any other module in the P5EE project, and it is very useful
+without any knowledge or use of other elements of the P5EE project.
+
+See the P5EE web sites for more information on the P5EE project.
 
     http://www.officevision.com/pub/p5ee
     http://p5ee.perl.org
 
-App::Options is in its own distribution because it will be very stable
-and can be installed in the default perl places on the system.
-This is different than the App-Context, App-Repository, and App-Widget
-distributions which are expected to evolve significantly.
-
-A developer writing an application based on the P5EE/App-Context framework
-will want to install App-Options in the default perl places.  The other
-distributions will be installed in release-specific locations.
-
-=head1 Methods
+=head1 REFERENCE: Methods
 
 =cut
 
@@ -99,11 +130,34 @@ distributions will be installed in release-specific locations.
     * Signature: App::Options->init(%named);
     * Signature: App::Options->init($myvalues);
     * Signature: App::Options->init($myvalues, %named);
+     (NOTE: %named represents a list of name/value pairs used as named args.
+            Params listed below without a $ are named args.)
     * Param:  $myvalues     HASH
+              specify a hash reference other than %App::options to put
+              configuration values in.
     * Param:  values        HASH
+              specify a hash reference other than %App::options to put
+              configuration values in.
+    * Param:  options       ARRAY
+              specify a limited, ordered list of options to be displayed
+              when the "--help" or "-?" options are invoked
+    * Param:  option        HASH
+              specify additional attributes of any of
+              the various options to the program (see below)
+    * Param:  no_cmd_args 
+              do not process command line arguments
+    * Param:  no_env_vars 
+              do not read environment variables
+    * Param:  no_option_file 
+              do not read in the option file(s)
+    * Param:  print_usage 
+              provide an alternate print_usage() function
     * Return: void
-    * Throws: <none>
-    * Since:  0.01
+    * Throws: "App::Options->init(): must have an even number of vars/values for named args"
+    * Throws: "App::Options->init(): 'values' arg must be a hash reference"
+    * Throws: "App::Options->init(): 'option' arg must be a hash reference"
+    * Throws: "App::Options->init(): 'options' arg must be an array reference"
+    * Since:  0.60
 
     Sample Usage: 
 
@@ -133,53 +187,56 @@ distributions will be installed in release-specific locations.
             no_cmd_args => 1,
             no_env_vars => 1,
             no_option_file => 1,
-            print_usage => sub { my ($values, $init_options) = @_; print "Use it right!\n"; },
+            print_usage => sub { my ($values, $init_args) = @_; print "Use it right!\n"; },
         );
     }
 
 The init() method reads the command line args (@ARGV),
-finds an options file, and loads it, all in a way which
+then finds an options file, and loads it, all in a way which
 can be done in a BEGIN block.  This is important to be able
 to modify the @INC array so that normal "use" and "require"
 statements will work with the configured @INC path.
 
-The various named parameters of the init() method are as follows.
+The following named arguments are understood by the init() method.
 
     values - specify a hash reference other than %App::options to
-        put configuration values in.
+             put option values in.
     options - specify a limited, ordered list of options to be
-        displayed when the "--help" or "-?" options are invoked
+              displayed when the "--help" or "-?" options are invoked
     option - specify optional additional information about any of
-        the various options to the program (see below)
+             the various options to the program (see below)
     no_cmd_args - do not process command line arguments
     no_env_vars - do not read environment variables
     no_option_file - do not read in the option file
+    show_all - force showing all options in "--help" even when
+             "options" list specified
     print_usage - provide an alternate print_usage() function
 
 The additional information that can be specified about any individual
-option variable is as follows.
+option variable using the "option" arg above is as follows.
 
-    default - the default variable if none supplied on the command
+    default - the default value if none supplied on the command
         line, in an environment variable, or in an option file
     required - the program will not run unless a value is provided
         for this option
     type - if a value is provided, the program will not run unless
         the value matches the type ("string", "integer", "float",
         "boolean", "date", "time", "datetime", /regexp/).
+    env - a list of semicolon-separated environment variable names
+        to be used to find the value instead of "APP_{VARNAME}".
     description - printed next to the option in the "usage" page
 
 The init() method stores command line options and option
 file values all in the global %App::options hash (unless the
 "values" argument specifies another reference to a hash to use).
-The special keys to this resulting hash are as follows.
 
-    option_file - specifies the exact file name of the option file useful
-       for command line usage (i.e. "app --option_file=/path/to/app.conf")
-       "option_file" is automatically set with the option file that it found
-       if it is not supplied at the outset as an argument.
+The special options are as follows.
+
+    option_file - specifies the exact file name of the option file to be
+       used (i.e. "app --option_file=/path/to/app.conf").
 
     app - specifies the tag that will be used when searching for
-       a option file. (i.e. "app --app=myapp" will search for "myapp.conf"
+       an option file. (i.e. "app --app=myapp" will search for "myapp.conf"
        before it searches for "app.conf")
        "app" is automatically set with the stem of the program file that 
        was run (or the first part of PATH_INFO) if it is not supplied at
@@ -193,7 +250,7 @@ The special keys to this resulting hash are as follows.
        set explicitly, it is detected from the following places:
           1. PREFIX environment variable
           2. the real path of the program with /bin or /cgi-bin stripped
-          3. the current directory
+          3. /usr/local
        If it is autodetected from one of those three places, that is
        only provisional, in order to find the "option_file".  The "prefix"
        variable should be set authoritatively in the "option_file" if it
@@ -208,7 +265,11 @@ The special keys to this resulting hash are as follows.
        which option files are being used and what the resulting variable
        values are.
 
-    import - a list of additional option files to be processed
+    import - a list of additional option files to be processed.
+       An imported file goes on the head of the queue of files to be
+       processed.
+
+    flush_imports - flush all pending imported option files.
 
 =cut
 
@@ -220,14 +281,14 @@ sub init {
     my $values = ($#_ > -1 && ref($_[0]) eq "HASH") ? shift : \%App::options;
 
     ($#_ % 2 == 1) || croak "App::Options->init(): must have an even number of vars/values for named args";
-    my %init_options = @_;
+    my %init_args = @_;
     # "values" in named arg list overrides the one supplied as an initial hashref
-    if (defined $init_options{values}) {
-        (ref($init_options{values}) eq "HASH") || croak "App::Options->init(): 'values' arg must be a hash reference";
-        $values = $init_options{values};
+    if (defined $init_args{values}) {
+        (ref($init_args{values}) eq "HASH") || croak "App::Options->init(): 'values' arg must be a hash reference";
+        $values = $init_args{values};
     }
     else {
-        $init_options{values} = $values;
+        $init_args{values} = $values;
     }
 
     #######################################################################
@@ -235,7 +296,7 @@ sub init {
     #######################################################################
 
     my ($var, $value, @vars, $option);
-    $option = $init_options{option};
+    $option = $init_args{option};
 
     if ($option) {
         croak "App::Options->init(): 'option' arg must be a hash reference"
@@ -278,12 +339,15 @@ sub init {
     # an option without an "=" (i.e. --help) acts as --help=1
     # Put the var/value pairs in %$values
     #################################################################
-    if (! $init_options{no_cmd_args}) {
+    if (! $init_args{no_cmd_args}) {
         while ($#ARGV >= 0 && $ARGV[0] =~ /^--?([^=-][^=]*)(=?)(.*)/) {
             $var = $1;
             $value = ($2 eq "") ? 1 : $3;
             shift @ARGV;
             $values->{$var} = $value;
+        }
+        if ($#ARGV >= 0 && $ARGV[0] eq "--") {
+            shift @ARGV;
         }
     }
 
@@ -340,15 +404,19 @@ sub init {
     # to the directory in which the script runs.
     if (!$prefix) {
         use Cwd 'abs_path';
-        $prefix = abs_path($prog_dir);
-        $prefix =~ s!/bin$!!;
-        $prefix =~ s!/cgi-bin.*$!!;
+        my $abs_prog_dir = abs_path($prog_dir);
+        if ($abs_prog_dir =~ s!/bin$!!) {
+            $prefix = $abs_prog_dir;
+        }
+        elsif ($abs_prog_dir =~ s!/cgi-bin.*$!!) {
+            $prefix = $abs_prog_dir;
+        }
     }
 
-    $prefix = "." if (!$prefix);   # last resort: current directory
+    $prefix = "/usr/local" if (!$prefix);   # last resort: current directory
 
     my ($env_var, @env_vars, $regexp);
-    if (! $init_options{no_option_file}) {
+    if (! $init_args{no_option_file}) {
         #################################################################
         # 5. Define the standard places to look for an option file
         #################################################################
@@ -360,6 +428,7 @@ sub init {
         push(@option_file, "$prog_dir/app.conf");
         push(@option_file, "$prefix/etc/app/$app.conf") if ($app ne "app");
         push(@option_file, "$prefix/etc/app/app.conf");
+        push(@option_file, "/etc/app/app.conf");
 
         #################################################################
         # 6. now actually read in the file(s)
@@ -368,16 +437,16 @@ sub init {
         #    are indicated by an "import" line
         #################################################################
 
-        local(*App::FILE);
+        local(*App::Options::FILE);
         my ($option_file, $exclude_section, $app_specified);
         my ($cond, @cond, $exclude);
         while ($#option_file > -1) {
             $option_file = shift(@option_file);
             $exclude_section = 0;
             print STDERR "Looking for option file [$option_file]\n" if ($values->{debug_options});
-            if (open(App::FILE, "< $option_file")) {
+            if (open(App::Options::FILE, "< $option_file")) {
                 print STDERR "Found option file [$option_file]\n" if ($values->{debug_options});
-                while (<App::FILE>) {
+                while (<App::Options::FILE>) {
                     chomp;
                     # for lines that are like "[regexp]" or even "[regexp] var = value"
                     # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
@@ -411,6 +480,7 @@ sub init {
                             }
                             last if ($exclude);
                         }
+                        s/^#.*$//;               # delete comments
                         if ($_) {
                             # this is a single-line condition, don't change the $exclude_section flag
                             next if ($exclude);
@@ -437,17 +507,24 @@ sub init {
                         
                         # TODO: here documents, var = <<EOF
                         # only add values which have never been defined before
-                        if (!defined $values->{$var} && !$init_options{no_env_vars}) {
-                            if ($option && $option->{$var}{env}) {
-                                @env_vars = split(/[,;]/, $option->{$var}{env});
-                            }
-                            else {
-                                @env_vars = ( "APP_" . uc($var) );
-                            }
-                            foreach $env_var (@env_vars) {
-                                if (defined $ENV{$env_var}) {
-                                    $value = $ENV{$env_var};
-                                    last;
+                        if (!defined $values->{$var}) {
+                            if (!$init_args{no_env_vars}) {
+                                if ($option && defined $option->{$var}{env}) {
+                                    if ($option->{$var}{env} eq "") {
+                                        @env_vars = ();
+                                    }
+                                    else {
+                                        @env_vars = split(/[,;]/, $option->{$var}{env});
+                                    }
+                                }
+                                else {
+                                    @env_vars = ( "APP_" . uc($var) );
+                                }
+                                foreach $env_var (@env_vars) {
+                                    if ($env_var && defined $ENV{$env_var}) {
+                                        $value = $ENV{$env_var};
+                                        last;
+                                    }
                                 }
                             }
                             # do variable substitutions, var = ${prefix}/bin
@@ -458,7 +535,7 @@ sub init {
                         }
                     }
                 }
-                close(App::FILE);
+                close(App::Options::FILE);
 
                 if ($values->{flush_imports}) {
                     @option_file = ();  # throw out other files to look for
@@ -477,10 +554,10 @@ sub init {
     #################################################################
 
     @vars = ();
-    if ($init_options{options}) {
+    if ($init_args{options}) {
         croak "App::Options->init(): 'options' arg must be an array reference"
-            if (ref($init_options{options}) ne "ARRAY");
-        push(@vars, @{$init_options{options}});
+            if (ref($init_args{options}) ne "ARRAY");
+        push(@vars, @{$init_args{options}});
     }
 
     if ($option) {
@@ -490,15 +567,20 @@ sub init {
     foreach $var (@vars) {
         if (!defined $values->{$var}) {
             $value = $option ? $option->{$var}{default} : undef;
-            if (!$init_options{no_env_vars}) {
-                if ($option && $option->{$var}{env}) {
-                    @env_vars = split(/[,;]/, $option->{$var}{env});
+            if (!$init_args{no_env_vars}) {
+                if ($option && defined $option->{$var}{env}) {
+                    if ($option->{$var}{env} eq "") {
+                        @env_vars = ();
+                    }
+                    else {
+                        @env_vars = split(/[,;]/, $option->{$var}{env});
+                    }
                 }
                 else {
                     @env_vars = ( "APP_" . uc($var) );
                 }
                 foreach $env_var (@env_vars) {
-                    if (defined $ENV{$env_var}) {
+                    if ($env_var && defined $ENV{$env_var}) {
                         $value = $ENV{$env_var};
                         last;
                     }
@@ -507,8 +589,8 @@ sub init {
             # do variable substitutions, var = ${prefix}/bin
             if (defined $value) {
                 $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
-                $values->{$var} = $value;    # save all in %App::options
             }
+            $values->{$var} = $value;    # save all in %App::options
         }
     }
 
@@ -574,6 +656,16 @@ sub init {
         $exit_status = 0;
     }
 
+    #################################################################
+    # These are the actual Perl regular expressions which match
+    # numbers.  The regexes we use are approximately correct.
+    #################################################################
+    # \d(_?\d)*(\.(\d(_?\d)*)?)?[Ee][\+\-]?(\d(_?\d)*)  12 12.34 12.
+    # \.\d(_?\d)*[Ee][\+\-]?(\d(_?\d)*)                 .34
+    # 0b[01](_?[01])*
+    # 0[0-7](_?[0-7])*
+    # 0x[0-9A-Fa-f](_?[0-9A-Fa-f])*
+
     my ($type);
     if ($option) {
         @vars = (sort keys %$option);
@@ -583,14 +675,14 @@ sub init {
             $value = $values->{$var};
             next if (! defined $value);
             if ($type eq "integer") {
-                if ($value !~ /^-?[0-9]+$/) {
+                if ($value !~ /^-?[0-9_]+$/) {
                     $exit_status = 1;
                     print "Error: \"$var\" must be of type \"$type\" (not \"$value\")\n";
                 }
             }
             elsif ($type eq "float") {
-                if ($value !~ /^-?[0-9]+\.?[0-9]*([eE][+-]?[0-9]+)?$/ &&
-                    $value !~ /^-?[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?$/) {
+                if ($value !~ /^-?[0-9_]+\.?[0-9_]*([eE][+-]?[0-9_]+)?$/ &&
+                    $value !~ /^-?\.[0-9_]+([eE][+-]?[0-9_]+)?$/) {
                     $exit_status = 1;
                     print "Error: \"$var\" must be of type \"$type\" (not \"$value\")\n";
                 }
@@ -638,11 +730,11 @@ sub init {
     }
 
     if ($exit_status >= 0) {
-        if ($init_options{print_usage}) {
-            &{$init_options{print_usage}}($values, \%init_options);
+        if ($init_args{print_usage}) {
+            &{$init_args{print_usage}}($values, \%init_args);
         }
         else {
-            App::Options->print_usage($values, \%init_options);
+            App::Options->print_usage($values, \%init_args);
         }
         exit($exit_status);
     }
@@ -650,16 +742,16 @@ sub init {
 
 sub print_usage {
     shift if ($#_ > -1 && $_[0] eq "App::Options");
-    my ($values, $init_options) = @_;
+    my ($values, $init_args) = @_;
     print STDERR "Usage: $0 [options]\n";
     printf STDERR "       --%-32s print this message (also -?)\n", "help";
     my (@vars, $show_all, %option_seen);
-    if ($init_options->{options}) {
-        @vars = @{$init_options->{options}};
+    if ($init_args->{options}) {
+        @vars = @{$init_args->{options}};
         $show_all = 0 if (! defined $show_all);
     }
-    if ($init_options->{option} && ($show_all || $#vars == -1)) {
-        push(@vars, (sort keys %{$init_options->{option}}));
+    if ($init_args->{option} && ($show_all || $#vars == -1)) {
+        push(@vars, (sort keys %{$init_args->{option}}));
         $show_all = 0 if (! defined $show_all);
     }
     if ($show_all || (!defined $show_all && $#vars == -1)) {
@@ -667,7 +759,7 @@ sub print_usage {
     }
     my ($var, $value, $type, $desc, $option);
     my ($var_str, $value_str, $type_str, $desc_str);
-    $option = $init_options->{option} || {};
+    $option = $init_args->{option} || {};
     foreach $var (@vars) {
         next if ($option_seen{$var});
         $option_seen{$var} = 1;
@@ -682,6 +774,727 @@ sub print_usage {
         printf STDERR "       --%-32s [%s]$type_str$desc_str\n", $var_str, $value_str;
     }
 }
+
+=head1 FLOW: OPTION PROCESSING DETAILS
+
+Basic Concept - By calling App::Options->init(),
+your program parses the command line, environment variables,
+and option files, and puts var/value pairs into a
+global option hash, %App::options.
+
+    BEGIN {
+        use App::Options;
+        App::Options->init();
+    }
+
+One of the args to init() is the "values" arg, which allows
+for a different hash to be specified as the target of all
+option variables and values.
+
+    App::Options->init(values => \%Mymodule::opts);
+
+Throughout the following description of option processing,
+the %App::options hash may be referred to as the "options hash".
+However it will be understood that some other hash (as
+specified by the "values" arg) may actually be used.
+
+=head2 Command Line Arguments
+
+Unless the "no_cmd_args" arg is specified to init(), the
+first source of option values is the command line.
+
+Each command line argument that begins with a "-" or a "--" is
+considered to be an option.  It may take any form such as
+
+    --verbose      # long option, no arg
+    --verbose=5    # long option, with arg
+    --city=ATL     # long option, with arg
+    -x             # short option, no arg
+    -t=12:30       # short option, with arg
+
+All detected options are shifted out of @ARGV and the values are
+set in the options hash (%App::options).  Options without args
+are understood to have a value of "1".  So "--verbose" is
+identical to "--verbose=1".
+
+Naturally, the "--" option terminates command line option processing.
+
+=head2 Command Line Argument Variable Substitution
+
+Any value which includes a variable undergoes variable substitution
+before it is placed in the option hash. i.e.
+
+    logdir = ${prefix}/log
+
+This line will be expanded properly.
+(Of course, the variable and its value should be already set in the
+option hash.)
+
+Environment variables are not searched for the command line options
+because the command line options would override them anyway.
+
+=head2 Special Option "app"
+
+If the special option, "app", was not given on the command line,
+it is initialized.  This option is useful for including or excluding
+different sections of the option files.
+
+To handle the special case that the program is running in a CGI
+environment, the PATH_INFO variable is checked first.
+The first segment of the PATH_INFO is stripped off, and that becomes
+the value of the "app" option.
+
+Otherwise, the stem of the program name becomes the value of the
+"app" option.  The stem is the program name without any trailing
+extension (i.e. ".exe", ".pl", etc.).
+
+=head2 The Program Directory
+
+One of the places that will be searched for option files is the
+directory in which the program exists on the file system.
+This directory is known internally as "$prog_dir".
+
+=head2 Special Option "prefix"
+
+The special option, "prefix", represents the root directory of the
+software installation.  On a Unix system, a suite of software might
+by installed at "/usr/myproduct/thisversion", and that would be
+the "prefix".  Under this directory, you would expect to find the
+"src", "bin", "lib", and "etc" directories, as well as perhaps
+"cgi-bin", "htdocs", and others.
+
+If the "prefix" option is not specified on the command line,
+the $PREFIX environment variable is used.
+
+If that is not set, the $prog_dir with the trailing "/bin" or
+"/cgi-bin" stripped off is used.
+
+=head2 Option Files
+
+Unless the "no_option_file" arg is specified to init(), the
+next source of option values is the option files.
+
+By default, a cascading set of option files are all consulted
+to allow individual users to specify values that override the
+normal values for certain programs.  Furthermore, the
+values for individual programs can override the values configured
+generally system-wide. 
+
+The resulting value for an option variable comes from the first
+place that it is ever seen.  Subsequent mentions of the option
+variable within the same or other option files will be ignored.
+
+The following files are consulted in order.
+
+    $ENV{HOME}/.app/$app.conf
+    $ENV{HOME}/.app/app.conf
+    $prog_dir/$app.conf
+    $prog_dir/app.conf
+    $prefix/etc/app/$app.conf
+    $prefix/etc/app/app.conf
+    /etc/app/app.conf
+
+Thus, a system administrator might set up the $prefix/etc/app/app.conf
+file with system-wide defaults.  All option configuration could be done
+in this single file, separating the relevant variables into different
+sections for each different program to be configured.
+
+However, if the administrator decided that there were too many parameters
+for a single program such that it cluttered this file, he might put the
+option values for that program into the $prefix/etc/app/$app.conf file.
+This distinction is a matter of preference, as both methods are equally
+functional.
+
+A program developer may decide to override some of the system-wide
+option values for everyone by putting option files in the program's own
+directory.
+
+Furthermore, a user may decide to override some of the resulting
+option values by putting some option files in the appropriate
+place under his home directory.
+
+This separation of config files also allows for secure information
+(such as database passwords) to be required to be provided in the
+user's own (secured) option files rather than in read-only
+system-wide option files.
+
+Specifying the "--debug_options" option on the command line will
+assist in figuring out which files App::Options is looking at.
+
+=head2 Option File Format
+
+In general an option file takes the form of lines with "var = value".
+
+   dbname   = prod     # this is the production database
+   dbuser   = scott
+   dbpass   = tiger
+
+Trailing comments (preceded by a "#") are trimmed off.
+Spaces before and after the variable, and before and after the value
+are all trimmed off.  Then enclosing double-quotes (") are trimmed
+off.  Variables can be any of the characters in
+[a-zA-Z0-9_.-].  Values can be any printable characters or the
+empty string.  Any lines which aren't recognizable as "var = value"
+lines or section headers (see below) are ignored.
+
+If certain variables should be set only for certain programs (or
+under certain other conditions), section headers may be introduced.
+The special section headers "[ALL]" and "[]" specify the end of a
+conditional section and the resumption of unconditional option
+variables.
+
+   [progtest]
+   dbname   = test     # this is the test database
+   [ALL]
+   dbname   = prod     # this is the production database
+   dbuser   = scott
+   dbpass   = tiger
+
+In this case, the "progtest" program will get "dbname = test" while
+all other programs will get "dbname = prod".
+
+Note that you would not get the desired results if
+the "dbname = prod" statement was above the "[progtest]"
+header.  Once an option variable is set, no other occurrence
+of that variable in any option file will override it.
+
+For the special case where you want to specify a section for
+only one variable as above, the following shortcut is provided.
+
+   [progtest] dbname = test # this is the test database
+   dbname   = prod          # this is the production database
+   dbuser   = scott
+   dbpass   = tiger
+
+The "[progtest]" section header applied for only the single line.
+
+Furthermore, if it were desired to make this override for all
+programs containing "test" in them, you would use the following
+syntax.
+
+   [/test/] dbname = test   # this is the test database
+   dbname   = prod          # this is the production database
+   dbuser   = scott
+   dbpass   = tiger
+
+The "[/test/]" section header tested the "app" option using
+an arbitrary regular expression.
+
+The section headers can create a condition for inclusion
+based on any of the variables currently in the option
+hash.  In fact, "[progtest]" is just a synonym for
+"[app=progtest]" and "[/test/]" is a synonym for "[app=/test/]".
+
+If, for instance, the usernames and passwords were different
+for the different databases, you might have the following.
+
+   [/test/] dbname = test   # progs with "test" go to test database
+   dbname   = prod          # other progs go to the production database
+   [dbname=test]            # progs
+   dbuser   = scott
+   dbpass   = tiger
+   [dbname=prod]
+   dbuser   = mike
+   dbpass   = leopard
+
+The conditions created by a section header may be the result of more
+than a single condition.
+
+   [dbname=test;dbuser=scott]
+   dbpass = tiger
+   [dbname=test;dbuser=ken]
+   dbpass = ocelot
+   [dbname=prod;dbuser=scott]
+   dbpass = tiger62
+   [dbname=prod;dbuser=ken]
+   dbpass = 3.ocelot_
+
+Any number of conditions can be included with semicolons separating
+them.
+
+Each time a variable/value pair is found in an option file,
+it is only included in the option hash if that variable is
+currently not defined in the option hash.  Therefore, option
+files never override command line parameters.
+
+=head2 Option Environment Variables and Variable Substitution
+
+For each variable/value pair that is to be inserted into the
+option hash from the option files, the corresponding environment
+variables are searched to see if they are defined.  The environment
+always overrides an option file value.  (If the
+"no_env_vars" arg was given to the init() method, this whole
+step of checking the environment is skipped.)
+
+By default, the environment variable for an option variable named
+"dbuser" would be "APP_DBUSER".  However, if the "env" attribute
+of the "dbuser" option is set, a different environment variable
+may be checked instead (see the Tutorial below for examples).
+
+After checking the environment for override values,
+any value which includes a variable undergoes variable substitution
+before it is placed in the option hash.
+
+=head2 import and flush_imports
+
+After each option file is read, the special option "flush_imports"
+is checked.  If set, the list of pending option files to be
+parsed is cleared, and the flush_imports option is also cleared.
+
+This is useful if you do not want to inherit any of the option
+values defined in system-wide option files.
+
+The special option "import" is checked next.  If it is set, it is
+understood to be a list of option files (separated by /[,; ]+/)
+to be prepended to the list of pending option files.
+The import option itself is cleared.
+
+=head2 Other Environment Variables and Defaults
+
+After command line options and option files have been parsed,
+all of the other options which are known to the program are
+checked for environment variables and defaults.
+
+Options can be defined for the program with either the
+"options" arg or the "option" arg to the init() method
+(or a combination of both).
+
+    App::Options->init(
+        options => [ "dbname", "dbuser", "dbpass" ],
+        option => {
+            dbname => {
+                env => "DBNAME",
+                default => "devel",
+            },
+            dbuser => {
+                env => "DBUSER;DBI_USER",
+            },
+            dbpass => {
+                env => "", # password in %ENV is security breach
+            },
+        },
+    );
+
+For each option variable known, if the value is not already set,
+then the environment is checked, the default is checked, variable
+expansion is performed, and the value is entered into the 
+option hash.
+
+=head2 Special Option prefix
+
+The special option "prefix" is reconciled and finalized next.
+
+Unless it was specified on the command line, the original "prefix"
+was autodetected.  This may have resulted in a path which was 
+technically correct but was different than intended due to 
+symbolic linking on the file system.
+
+Since the "prefix" variable may also be set in an option file,
+there may be a difference between the auto-detected "prefix"
+and the option file "prefix".  If this case occurs, the
+option file "prefix" is the one that is accepted as authoritative.
+
+=head2 Special Option perlinc
+
+One of the primary design goals of App::Options was to be able
+to support multiple installations of software on a single machine.
+
+Thus, you might have different versions of software installed
+under various directories such as
+
+    /usr/product1/1.0.0
+    /usr/product1/1.1.0
+    /usr/product1/2.1.5
+
+Naturally, slightly different versions of your perl modules will
+be installed under each different "prefix" directory.
+When a program runs from /usr/product1/1.1.0/bin, the "prefix"
+will by "/usr/product1/1.1.0" and we want the @INC variable to
+be modified so that the appropriate perl modules are included
+from $prefix/lib/*.
+
+This is where the "perlinc" option comes in.
+
+If "perlinc" is set, it is understood to be a list of paths
+(separated by /[ ,;]+/) to be prepended to the @INC variable.
+
+If "perlinc" is not set,
+"$prefix/lib/perl5/$perlversion" and
+"$prefix/lib/perl5/site_perl/$perlversion" are automatically
+prepended to the @INC variable as a best guess.
+
+=head2 Special Option debug_options
+
+If the "debug_options" variable is set (often on the command
+line), the list of option files that was searched is printed
+out, the resulting list of variable values is printed out,
+and the resulting list of include directories (@INC) is printed
+out.
+
+=head2 Help and Validations
+
+After all values have been parsed, various conditions are
+checked to see if the program should not continue and the
+usage statement be printed out.
+
+If the "-?" or "--help" options were set on the command line,
+the usage statement is printed, and the program is exited.
+
+Then each of the options which is defined may be validated.
+
+If an option is designated as "required", its value must be
+defined somewhere (although it may be the empty string).
+(If it is also required to be a non-empty string, a regex
+may be provided for the type, i.e. type => "/./".)
+
+If an option is designated as having a "type", its value
+must either be undefined or match a specific regular expression.
+
+    Type       Regular Expression
+    =========  =========================================
+    string     (any)
+    integer    /^-?[0-9_]+$/
+    float      /^-?[0-9_]+\.?[0-9_]*([eE][+-]?[0-9_]+)?$/
+          (or) /^-?\.[0-9_]+([eE][+-]?[0-9_]+)?$/
+    boolean    /^[01]$/
+    date       /^[0-9]{4}-[01][0-9]-[0-3][0-9]$/
+    datetime   /^[0-9]{4}-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]$/
+    time       /^[0-2][0-9]:[0-5][0-9]:[0-5][0-9]$/
+    /regexp/   /regexp/
+
+Note that an arbitrary regular expression may be designated
+as the "type" by enclosing it in slashes (i.e. "/^[YN]$/").
+
+If the options fail any of the "required" or "type" validation
+tests, the App::Options::print_usage() function is called
+to print out a usage statement and the program is exited.
+
+=head1 TUTORIAL
+
+=head2 Getting Started
+
+Create a perl program called "demo1".
+
+    #!/usr/bin/perl
+    BEGIN {
+        use App::Options;
+        App::Options->init();            # call this method
+    }
+    print "Wow. Here are the options...\n";
+    foreach (sort keys %App::options) {  # options appear here!
+        printf("%-20s => %s\n", $_, $App::options{$_});
+    }
+
+Run it different kinds of ways to see how it responds.
+
+    demo1
+    demo1 -x
+    demo1 -x --verbose
+    demo1 --x -verbose
+    demo1 -x=5 --verbose=10 --foo=bar
+    demo1 --help
+    demo1 -x=8 --help
+    demo1 -?
+    demo1 --debug_options -?
+    demo1 -x=5 --verbose=10 --foo=bar --debug_options -?
+
+Now create a copy of the program.
+
+    cp demo1 demo2
+
+Start putting entries like the following
+
+    x = 7
+    hello = world
+    [demo2]
+    verbose=3
+    [/demo/]
+    baz = foo
+
+in the following files
+
+    $HOME/.app/demo1.conf
+    $HOME/.app/demo2.conf
+    $HOME/.app/app.conf
+    demo1.conf  (same directory as the demo* programs)
+    demo2.conf  (same directory as the demo* programs)
+    app.conf    (same directory as the demo* programs)
+    $PREFIX/etc/app/demo1.conf
+    $PREFIX/etc/app/demo2.conf
+    $PREFIX/etc/app/app.conf
+    /etc/app/app.conf
+
+and see how the programs respond in each different case.
+
+Next set environment variables like the following and
+see how the programs respond.
+
+    export APP_X=14
+    export APP_VERBOSE=7
+    export APP_FOO=xyzzy
+    export APP_HELLO=Plugh!
+
+You are well on your way.
+
+=head2 A Development Scenario
+
+Now let's imagine that we are writing a suite of programs which operate
+on a relational database.  These programs are part of a larger
+system which goes through a development cycle of development,
+test, and production.  Each step in the development cycle, the
+programs will run against different databases, but we don't want
+that to affect the code.
+
+Let's suppose that we write a program which lists the customers
+in a customer table.
+
+    create table person (
+        person_id      integer       not null auto_increment primary key,
+        first_name     varchar(99)   null,
+        last_name      varchar(99)   null,
+        birth_dt       date          null,
+        company_id     integer       null,
+        wholesale_ind  char(1)       null,
+        change_dttm    datetime      not null,
+    );
+
+We call this program "listcust".
+
+    #!/usr/local/bin/perl
+    BEGIN {
+        use App::Options;
+        App::Options->init();
+    }
+    use strict;
+    use DBI;
+    my $dsn = "dbi:$App::options{dbdriver}:database=$App::options{dbname}";
+    my $dbh = DBI->connect($dsn, $App::options{dbuser}, $App::options{dbpass});
+    my $sql = "select first_name, last_name, birth_dt, company_id, wholesale_ind, change_dttm from person";
+    my $cust = $dbh->selectall_arrayref($sql);
+    foreach my $row (@$cust) {
+        printf("%-24 %-24 %s %9d %s\n", @$row);
+    }
+    $dbh->disconnect();
+
+Then you can invoke this program with all of the command line options
+and everything works fine.
+
+    listcust --dbdriver=mysql --dbname=prod --dbuser=scott --dbpass=tiger
+
+However, if you don't use all of the options, you will get a DBI error.
+Furthermore, "listcust --help" doesn't help very much.  A system administrator
+confronting this problem would put the following lines into
+"$PREFIX/etc/app/app.conf" or "$PREFIX/etc/app/listcust.conf".
+
+    dbdriver = mysql
+    dbname   = prod
+    dbuser   = scott
+    dbpass   = tiger
+
+If, however, your projects were not in the habit of using the
+PREFIX environment variable and the program is not installed in
+$PREFIX/bin, he would have to put the above lines in the same
+directory as "listcust" in either the "app.conf" file or the
+"listcust.conf" file.
+
+A user (without privileges to the "$PREFIX/etc/app" directory
+or the directory in which "listcust" lives) would have to put
+the described lines into "$HOME/.app/app.conf" or
+"$HOME/.app/listcust.conf".
+
+Putting the options in any of those files would make "--help"
+print something intelligent.
+
+A developer, however, might decide that the program should
+have some defaults.
+
+    BEGIN {
+        use App::Options;
+        App::Options->init(
+            option => {
+                dbdriver => "mysql",
+                dbname   => "prod",
+                dbuser   => "scott",
+                dbpass   => "tiger",
+            },
+        );
+    }
+
+(This supplies defaults and also makes "--help" print something
+intelligent, regardless of whether there are any configuration
+files.)
+
+If all you wanted to do was provide defaults for options,
+this format would be fine.  However, there are other useful
+attributes of an option besides just the "default".
+To use those, you generally would use the more complete form
+of the "option" arg.
+
+    BEGIN {
+        use App::Options;
+        App::Options->init(
+            option => {
+                dbdriver => { default => "mysql", },
+                dbname   => { default => "prod",  },
+                dbuser   => { default => "scott", },
+                dbpass   => { default => "tiger", },
+            },
+        );
+    }
+
+Then we can indicate that these options are all required.
+If they are not provided, the program will not run.
+
+Meanwhile, it makes no sense to provide a "default" for a
+password.  We can remove the default, but if we ever tried to run
+the program without providing the password, it would not get
+past printing a "usage" statement.
+
+    BEGIN {
+        use App::Options;
+        App::Options->init(
+            option => {
+                dbdriver => { required => 1, default => "mysql", },
+                dbname   => { required => 1, default => "prod",  },
+                dbuser   => { required => 1, default => "scott", },
+                dbpass   => { required => 1, },
+            },
+        );
+    }
+
+We now might enhance the code in order to list only the 
+customers which had certain attributes.
+
+    my $sql = "select first_name, last_name, birth_dt, company_id, wholesale_ind, change_dttm from person";
+    my (@where);
+    push(@where, "first_name like '%$App::options{first_name}%'")
+        if ($App::options{first_name});
+    push(@where, "last_name like '%$App::options{last_name}%'")
+        if ($App::options{last_name});
+    push(@where, "birth_dt = '$App::options{birth_dt}'")
+        if ($App::options{birth_dt});
+    push(@where, "company_id = $App::options{company_id}")
+        if ($App::options{company_id});
+    push(@where, "wholesale_ind = '$App::options{wholesale_ind}'")
+        if ($App::options{wholesale_ind});
+    push(@where, "change_dttm >= '$App::options{change_dttm}'")
+        if ($App::options{change_dttm});
+    if ($#where > -1) {
+        $sql .= "\nwhere " . join("\n  and ", @where) . "\n";
+    }
+    my $cust = $dbh->selectall_arrayref($sql);
+
+The init() method call might be enhanced to look like this.
+Also, the order that the options are printed by "--help" can
+be set with the "options" argument.  (Otherwise, they would
+print in alphabetical order.)
+
+    BEGIN {
+        use App::Options;
+        App::Options->init(
+            options => [ "dbdriver", "dbname", "dbuser", "dbpass",
+                "first_name", "last_name", "birth_dt", "company_id",
+                "wholesale_ind", "change_dttm",
+            ],
+            option => {
+                dbdriver => {
+                    description => "dbi driver name",
+                    default => "mysql",
+                    env => "DBDRIVER",  # use a different env variable
+                    required => 1,
+                },
+                dbname   => {
+                    description => "database name",
+                    default => "prod", 
+                    env => "DBNAME",  # use a different env variable
+                    required => 1,
+                },
+                dbuser   => {
+                    description => "database user",
+                    default => "scott",
+                    env => "DBUSER;DBI_USER",  # check both
+                    required => 1,
+                },
+                dbpass   => {
+                    description => "database password",
+                    env => "",  # disable env for password (insecure)
+                    required => 1,
+                },
+                first_name => {
+                    description => "portion of customer's first name",
+                },
+                last_name  => {
+                    description => "portion of customer's last name",
+                },
+                birth_dt   => {
+                    description => "customer's birth date",
+                    type => "date",
+                },
+                company_id => {
+                    description => "customer's company ID",
+                    type => "integer",
+                },
+                wholesale_ind => {
+                    description => "indicator of wholesale customer",
+                    type => "/^[YN]$/",
+                },
+                change_dttm => {
+                    description => "changed-since date/time",
+                    type => "datetime",
+                },
+            },
+        );
+    }
+
+It should be noted in the example above that the default environment
+variable name ("APP_${varname}") has been overridden for some of 
+the options.  The "dbname" variable will be set from "DBNAME"
+instead of "APP_DBNAME".  The "dbuser" variable will be set
+from either "DBUSER" or "DBI_USER".
+
+It should also be noted that if only the order of the options rather
+than all of their attributes were desired, the following could
+have been used.  Using the "options" arg
+limits the printing of options to only those listed unless the
+"show_all" argument is also given.  Supplying the "show_all"
+argument allows for all options set in the option files also
+to be printed.
+
+    BEGIN {
+        use App::Options;
+        App::Options->init(
+            options => [ "dbdriver", "dbname", "dbuser", "dbpass",
+                "first_name", "last_name", "birth_dt", "company_id",
+                "wholesale_ind", "change_dttm",
+            ],
+            show_all => 1,
+        );
+    }
+
+If, for some reason, the program needed to put the options
+into a different option hash (instead of %App::options) or directly
+specify the option file to use (disregarding the standard option
+file search path), it may do so using the following syntax.
+
+    App::Options->init(
+        values => \%Mymodule::opts,
+        option_file => "/path/to/options.conf",
+    );
+
+If, for some reason, the program needs to inhibit one or more
+of the sources for options, it can do so with one of the
+following arguments.  Of course, inhibiting all three would
+be a bit silly.
+
+    App::Options->init(
+        no_cmd_args => 1,
+        no_option_file => 1,
+        no_env_vars => 1,
+    );
+
+Hopefully, that's enough to get you going.
+
+I welcome all feedback, bug reports, and feature requests.
 
 =head1 ACKNOWLEDGEMENTS
 

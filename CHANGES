@@ -2,6 +2,14 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.63
+ x improve documentation (api reference, logic flow, usage tutorial)
+ x "integer" type now matches integers with underscores (i.e. 1_000_000)
+ x "float" type now matches numbers with underscores (i.e. 1_000.000_001)
+ x added /etc/app/app.conf to the end of the option file search path
+ x default "prefix" is now "/usr/local" instead of "."
+ x {env} attribute of "" means don't search any env variable
+
 VERSION 0.62
  x [prog] matches "prog" only. [/prog/] matches by regular expression.
    In version 0.61, the section [list] would match ($app =~ /list/).
