@@ -1,0 +1,15 @@
+CHANGES
+MANIFEST
+Makefile.PL
+README
+TODO
+bin/prefix
+lib/App/Options.pm
+t/app.conf
+t/main.t
+t/test1
+t/test1.conf
+t/test2
+t/test3
+t/test4
+t/test5

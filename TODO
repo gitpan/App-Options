@@ -1,0 +1,11 @@
+######################################################################
+## File: $Id: TODO,v 1.2 2004/01/07 15:24:07 spadkins Exp $
+######################################################################
+ o quoting, var = " hello world "
+ o check list of configurable environment vars instead of "APP_${uc_var}"
+ o write "prefix.pod"
+ o figure out a way to do it outside the BEGIN block (i.e. use App::Options qw(:init))
+ o here documents, var = <<EOF
+ o try use lib "dir"; instead of unshift(@INC,"dir")
+ o consider checking the PERL5LIB variable under -T
+

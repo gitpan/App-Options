@@ -1,0 +1,14 @@
+#!/usr/local/bin/perl
+
+BEGIN {
+   use lib "lib";
+   use lib "../lib";
+   use App::Options;
+   App::Options->init(
+       option => {
+           invoice_id => "4",
+           cust_nm => "Joe Smith",
+       },
+   );
+}
+

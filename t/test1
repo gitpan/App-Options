@@ -1,0 +1,11 @@
+#!/usr/local/bin/perl
+
+BEGIN {
+   use lib "lib";
+   use lib "../lib";
+   use App::Options;
+   App::Options->init(
+      options => [ "invoice_id", "cust_nm" ],
+   );
+}
+
