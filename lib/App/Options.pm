@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.6 2004/02/19 16:17:15 spadkins Exp $
+## $Id: Options.pm,v 1.8 2004/09/02 21:06:57 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -10,7 +10,7 @@ use strict;
 
 use Carp;
 
-$VERSION = "0.90";
+$VERSION = "0.91";
 
 =head1 NAME
 
@@ -74,19 +74,40 @@ App::Options is different than most of the Getopt::* modules
 because it integrates the processing of command line options,
 environment variables, and config files.
 
-It is different from AppConfig (to which its description bears the
-most resemblance) by its ability to configure a suite of programs
-with a cascading set of configuration files. This allows for a large
-number of programs in a large software system to share a small set
-of configuration files. Some of the option values may be shared, and
-some may be targetted at a single program or a pattern-matched set
-of programs.
-
 Furthermore, its special treatment of the "perlinc"
 option facilitates the inclusion ("use") of application-specific
 perl modules from special places to enable the installation of
 multiple versions of an application on the same system (i.e.
 /usr/myproduct/version).
+
+The description of the AppConfig distribution sounds similar
+to is described here.  However, the following are the key
+differences.
+
+ * App::Options does its option processing in the BEGIN block.
+   This allows for the @INC variable to be modified in time
+   for subsequent "use" and "require" statements.
+
+ * App::Options "sections" (i.e. "[cleanup]") are conditional.
+   It is conditional in App::Options, allowing you to use one
+   set of option files to configure an entire suite of programs
+   and scripts.  In AppConfig, the section name is simply a 
+   prefix which gets prepended to subsequest option names.
+
+ * App::Options consults a cascading set of option files.
+   These files include those which are system global, project
+   global, and user private.  This allows for system
+   administrators, project developers, and in individual
+   users to all have complementary roles on defining
+   the configuration values.
+
+ * App::Options is not a toolkit but a standardized way of
+   doing option processing.  With AppConfig, you still have
+   to decide where to put config files, and you still have to
+   code the "--help" feature.  With App::Options, you simply
+   "use App::Options;" and all the hard work is done.
+   Advanced options can be added later as necessary as args
+   to the "use" statement.
 
 App::Options is also the easiest command-line processing system
 that I have found anywhere. It then provides a smooth transition to
@@ -97,12 +118,9 @@ to use App::Options.
 The documentation of App::Options takes three
 forms below.
 
-  Reference - describing the API (methods, args)
-  Flow - describing the order and logic of processing
-  Tutorial - describing how to use the API in practical situations
-
-Hopefully these will be complementary and useful, even if they
-are somewhat redundant.
+  API Reference - describing the API (methods, args)
+  Logic Flow - describing the order and logic of processing
+  Usage Tutorial - describing how to use the API in practical situations
 
 =head1 RELATION TO THE P5EE PROJECT
 
@@ -167,7 +185,7 @@ See the P5EE web sites for more information on the P5EE project.
     near as nice to write at the top of your programs.
 
     BEGIN {
-        use App::Options qw(none);  # import() does not call init()
+        use App::Options qw(:none); # import() does not call init()
         App::Options->init();       # we call init() manually
     }
 
@@ -175,7 +193,7 @@ See the P5EE web sites for more information on the P5EE project.
 
     App::Options->init(
         values => \%MyPackage::options,
-        options => [ "option_file", "prefix", "app", "app_path_info",
+        options => [ "option_file", "prefix", "app",
                      "perlinc", "debug_options", "import", ],
         option => {
             option_file   => "~/.app/app.conf",         # set default
@@ -247,9 +265,6 @@ The special options are as follows.
        "app" is automatically set with the stem of the program file that 
        was run (or the first part of PATH_INFO) if it is not supplied at
        the outset as an argument.
-
-    app_path_info - this is the remainder of PATH_INFO after the first
-       part is taken off to make the app.
 
     prefix - This represents the base directory of the software
        installation (i.e. "/usr/myproduct/1.3.12").  If it is not
@@ -358,29 +373,7 @@ sub init {
     }
 
     #################################################################
-    # 2. find the app.
-    #    by default this is the basename of the program
-    #    in a web application, this is overridden by any existing
-    #    first part of the PATH_INFO
-    #################################################################
-    my $app = $values->{app};
-    my $app_path_info = $ENV{PATH_INFO} || "";
-    $app_path_info =~ s!/+$!!;    # strip off trailing slashes ("/")
-    if (!$app) {
-        if ($app_path_info && $app_path_info =~ s!^/([^/]+)!!) {
-            $app = $1;            # last part of PATH_INFO (without slashes)
-        }
-        else {
-            $app = $0;            # start with the full script path
-            $app =~ s!.*/!!;      # strip off leading path
-            $app =~ s/\.[^.]+$//; # strip off trailing file type (i.e. ".pl")
-        }
-        $values->{app} = $app;
-    }
-    $values->{app_path_info} = $app_path_info;
-
-    #################################################################
-    # 3. find the directory the program was run from.
+    # 2. find the directory the program was run from.
     #    we will use this directory to search for the
     #    option file.
     #################################################################
@@ -396,7 +389,7 @@ sub init {
     }
 
     #################################################################
-    # 4. guess the "prefix" directory for the entire
+    # 3. guess the "prefix" directory for the entire
     #    software installation.  The program is usually in
     #    $prefix/bin or $prefix/cgi-bin.
     #################################################################
@@ -421,6 +414,32 @@ sub init {
 
     $prefix = "/usr/local" if (!$prefix);   # last resort: current directory
 
+    #################################################################
+    # 4. find the app.
+    #    by default this is the basename of the program
+    #    in a web application, this is overridden by any existing
+    #    first part of the PATH_INFO
+    #################################################################
+    my $app = $values->{app};
+    my $path_info = $ENV{PATH_INFO} || "";
+    $path_info =~ s!/+$!!;    # strip off trailing slashes ("/")
+    if (!$app) {
+        if ($path_info && $path_info =~ s!^/([^/]+)!!) {
+            my $path_info_app = $1;  # first part of PATH_INFO (without slashes)
+            if ( ($ENV{HOME} && -f "$ENV{HOME}/.app/$path_info_app.conf") ||
+                 (-f "$prog_dir/$path_info_app.conf") ||
+                 (-f "$prefix/etc/app/$path_info_app.conf") ) {
+                $app = $path_info_app;
+            }
+        }
+        if (!$app) {
+            $app = $0;            # start with the full script path
+            $app =~ s!.*/!!;      # strip off leading path
+            $app =~ s/\.[^.]+$//; # strip off trailing file type (i.e. ".pl")
+        }
+        $values->{app} = $app;
+    }
+
     my ($env_var, @env_vars, $regexp);
     if (! $init_args{no_option_file}) {
         #################################################################
@@ -444,7 +463,7 @@ sub init {
         #################################################################
 
         local(*App::Options::FILE);
-        my ($option_file, $exclude_section, $app_specified);
+        my ($option_file, $exclude_section);
         my ($cond, @cond, $exclude);
         while ($#option_file > -1) {
             $option_file = shift(@option_file);
@@ -459,17 +478,14 @@ sub init {
                     if (s|^ *\[([^\[\]]*)\] *||) {
                         @cond = split(/;/,$1);   # separate the conditions that must be satisfied
                         $exclude = 0;            # assume the condition allows inclusion (! $exclude)
-                        $app_specified = 0;      # the app (program name) itself has not yet been specified
                         foreach $cond (@cond) {  # check each condition
                             if ($cond =~ /^([^=]+)=(.*)$/) {  # i.e. [city=ATL] or [name=/[Ss]tephen/]
                                 $var = $1;
                                 $value = $2;
-                                $app_specified = 1 if ($var eq "app");
                             }
                             else {              # i.e. [go] matches the program (app) named "go"
                                 $var = "app";
                                 $value = $cond;
-                                $app_specified = 1;
                             }
                             if ($value =~ m!^/(.*)/$!) {  # variable's value must match the regexp
                                 $regexp = $1;
@@ -480,9 +496,6 @@ sub init {
                             }
                             else {  # a variable's value must match exactly
                                 $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value);
-                            }
-                            if (!$app_specified && !$exclude) {
-                                $exclude = ($#cond > -1 && $exclude_section);
                             }
                             last if ($exclude);
                         }
@@ -515,7 +528,7 @@ sub init {
                         # only add values which have never been defined before
                         if (!defined $values->{$var}) {
                             if (!$init_args{no_env_vars}) {
-                                if ($option && defined $option->{$var}{env}) {
+                                if ($option && defined $option->{$var} && defined $option->{$var}{env}) {
                                     if ($option->{$var}{env} eq "") {
                                         @env_vars = ();
                                     }
@@ -763,7 +776,8 @@ sub print_usage {
     printf STDERR "       --%-32s print this message (also -?)\n", "help";
     my (@vars, $show_all, %option_seen);
     $show_all = $init_args->{show_all};
-    $show_all = 1 if (!defined $show_all);
+    $show_all = $values->{show_all} if (defined $values->{show_all});
+    $show_all = 1 if (!defined $show_all && !defined $init_args->{option} && !defined $init_args->{options});
     if ($init_args->{options}) {
         @vars = @{$init_args->{options}};
     }
@@ -1463,15 +1477,17 @@ have been used.
             "first_name", "last_name", "birth_dt", "company_id",
             "wholesale_ind", "change_dttm",
         ],
-        show_all => 0,
+        show_all => 1,
     );
 
 Using the "options" arg causes the options to
 be printed in the order given in the "--help" output.  Then the
 remaining options defined in the "option" arg are printed in 
-alphabetical order.  Finally, all other options which are set
-on the command line or in option files are printed unless
-the "show_all => 0" argument is provided.
+alphabetical order.  All other options which are set
+on the command line or in option files are printed if the
+"show_all" option is set.  This option is off by default if
+either the "options" arg or the "option" arg are supplied
+and on if neither are supplied.
 
 If, for some reason, the program needed to put the options
 into a different option hash (instead of %App::options) or directly

@@ -1,12 +1,13 @@
 ######################################################################
-## File: $Id: README,v 1.2 2004/01/07 15:24:07 spadkins Exp $
+## File: $Id: README,v 1.3 2004/09/02 21:09:00 spadkins Exp $
 ######################################################################
 
 1. What is the App-Options distribution?
 
-The App-Options distribution is "yet another command line processor."
-However, it was created for maximum ease of use with the needs of
-the Perl 5 Enterprise Environment in mind (more on that later).
+You might say App-Options distribution is "yet another command line
+option processor."  However, it was created for maximum ease of use
+with the needs of the Perl 5 Enterprise Environment in mind
+(more on that later).
 
 The distribution consists of one Perl module and one shell script.
 
@@ -19,6 +20,8 @@ The distribution consists of one Perl module and one shell script.
        a family of environment variables (PATH, LD_LIBRARY_PATH,
        MANPATH, etc.) necessary for running programs out of a
        directory in which software has been installed.
+       (This script is useful but not necessary, and non-Unix users
+       may safely ignore it.)
 
 2. What are the features?
 
@@ -39,8 +42,8 @@ FEATURES OF App::Options
    the "whatever = value" statement.  Initialization searches
    "$HOME/.app/$prog.conf", "$HOME/.app/app.conf",
    "$progdir/$prog.conf", "$progdir/app.conf",
-   "$prefix/$prog.conf", and "$prefix/app.conf" in order
-   to find the option values.
+   "$prefix/$prog.conf", "$prefix/app.conf", and "/etc/app.conf"
+   in order to find the option values.
  o Import other files with "import = filename" statement
    Config files can, in essence, include other config files.
  o Stop importing other files with "flush_imports = 1" statement
@@ -63,11 +66,10 @@ FEATURES OF App::Options
    Any section specifier can apply only to a single line by
    putting a statement after it. "[city=LAX] state = CA"
  o Modify @INC variable with the "perlinc = path1,path2" statement
-   If invoked in the BEGIN block, this allows the person deploying
-   the software to set up the Perl include path so that a
-   particular version of the software installed on the system is
-   used.  Subsequent uses of "use" and "require" will load modules
-   from the configured locations.
+   This allows the person deploying the software to set up the Perl
+   include path so that a particular version of the software
+   installed on the system is used.  Subsequent uses of "use" and
+   "require" will load modules from the configured locations.
  o Validate that "required" options are provided
    Certain options can be identified as required. Otherwise the
    program will not run.
@@ -120,41 +122,51 @@ Then I moved it out to a module so I could reuse it easily.
 Then it grew into a full-fledged command line, environment
 variable, and config file value option processor.
 
-In retrospect, I don't really know whether or not the other
-modules can run just as well in a BEGIN block and have a special
-feature to modify @INC.  However, this met a primary design
-goal of App::Options.
-
 I did try Getopt::Long, but it wasn't that easy to use, you had
 to code your own "--help" feature, and it didn't incorporate
 environment variables or config files.  I wanted something
 more high-level and full-featured, so I wrote App::Options.
 
-I looked at the description of the AppConfig distribution,
-and it sounds similar to what I describe here.  However,
-the meaning of "sections" (i.e. "[cleanup]") is a conditional
-construct in App::Options.  Thus, it supports a single
-family of configuration files to configure a whole suite
-of programs and scripts. (Each program can have its own
-section, and optionally its own file in both "user" and
-"system" places.)  This met design goal #2.
+The description of the AppConfig distribution sounds similar
+to what is described here.  However, the following are the key
+differences.
 
-See the section below on ease of use for design goal #3.
+ * App::Options does its option processing in the BEGIN block.
+   This allows for the @INC variable to be modified in time
+   for subsequent "use" and "require" statements.
+   This met design goal #1.
+
+ * App::Options consults a cascading set of option files.
+   These files include those which are system global, project
+   global, and user private.  This allows for system
+   administrators, project developers, and in individual
+   users to all have complementary roles on defining
+   the configuration values.  This met design goal #2.
+
+ * App::Options "sections" (i.e. "[cleanup]") are conditional.
+   It is conditional in App::Options, allowing you to use one
+   set of option files to configure an entire suite of programs
+   and scripts.  In AppConfig, the section name is simply a 
+   prefix which gets prepended to subsequest option names.
+   This also helped to meet design goal #2.
+
+ * App::Options is not a toolkit but a standardized way of
+   doing option processing.  With AppConfig, you still have
+   to decide where to put config files, you still have to
+   code the "--help" feature, etc.  With App::Options, you simply
+   "use App::Options;" and all the hard work is done.
+   Advanced options can be added later as necessary as args
+   to the "use" statement.  This met design goal #3.
 
 Design goal #4 required the autodetection of the ${prefix}
-variable.  Thus, the App::Options module is integrated with
+variable.  Thus, the App::Options module can be integrated with
 the discipline of choosing a root directory for your
 software installation (i.e. PREFIX=/usr/mycompany/2.0.12).
 
 5. You say it's so easy. Show me.
 
   #!/usr/bin/perl
-
-  BEGIN {
-      use App::Options;
-      App::Options->init();
-  }
-
+  use App::Options;
   # now use the %App::options hash
   print "yada yada\n" if ($App::options{verbose});
 

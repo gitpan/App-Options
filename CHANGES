@@ -2,6 +2,13 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.91
+ x show_all is off by default whenever "option" or "options" used
+ x remove app_path_info
+
+VERSION 0.90
+ x new "use App::Options (...);" syntax (rather than ->init(...) syntax)
+
 VERSION 0.64
  x added $VERSION to App::Options (use VERSION_FROM in Makefile.PL)
  x fixed bug where "show_all" wasn't showing all on --help
