@@ -1,7 +1,46 @@
-#########################################
+#############################################################################
 # CHANGE LOG
-#########################################
+#############################################################################
 
-VERSION 0.60
+VERSION 0.62
+ x [prog] matches "prog" only. [/prog/] matches by regular expression.
+   In version 0.61, the section [list] would match ($app =~ /list/).
+   In version 0.62, the section [list] only matches ($app eq "list"),
+   while [/list/] matches ($app =~ /list/).
+ x type="/regexp/" matches regexp. unknown types ignored.
+   In version 0.61, an option type which was not one of the known
+   option types (integer, float, date, datetime, etc.), was considered
+   automatically as a regular expression.
+   In version 0.62, only types which take the form "/regexp/" are
+   actually regular expressions.  All other unknown "types" are ignored.
+   This sets the groundwork for better forward-compatibility when new
+   types are introduced, they will not break older versions of the code.
+   It also just seems clearer.
+ x "show_all" option - shows all defined options, not just in [ options ]
+   In version 0.61, the --help option would show all variables defined
+   in the code, on the command line, or in any of the files (i.e.show_all=1).
+   However, if the "options" argument is used in the init() method in the
+   code, only those enumerated options would be shown (i.e. show_all=0).
+   In version 0.62, the same behavior applies unless the "show_all"
+   parameter is given explicitly.
+ x quoting, var = " hello world "
+   In version 0.61, variable values in the option file had leading and
+   trailing spaces removed.  This meant that a value of a single space
+   was not possible.
+   In version 0.62, the same behavior applies.  However, if the 
+   remaining text starts with " and ends with ", those quote marks are
+   removed.  i.e. var = " " will result in the value of a single space,
+   and message = "Hello world. " will have a trailing space.
+ x check list of configurable environment vars ("env") instead of
+   "APP_${uc_var}"
+   In version 0.61, variable values could be supplied by specifying the
+   variable prefixed with "APP_".  (i.e. "path" could be specified
+   with "APP_PATH")
+   In version 0.62, a list of environment variable names may be given
+   and the first with a supplied value is used for the value.
+   (i.e. options => { path => { env => "PATH" } } will cause the
+   "path" variable to be set from the "PATH" environment variable.)
+
+VERSION 0.61
  o Initial release
 

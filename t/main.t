@@ -14,7 +14,17 @@ $dir = "t" if (! -f "app.conf");
 delete $ENV{PREFIX};
 delete $ENV{DOCUMENT_ROOT};
 
-App::Options->init();
+$ENV{VAR10} = "value10";
+$ENV{APP_VAR11} = "value11";
+$ENV{VAR12} = "value12";
+
+App::Options->init(
+    option => {
+        var10 => { env => "VAR10a;VAR10", },
+        var11 => { },
+        var12 => { env => "VAR12", },
+    },
+);
 #print "CONF:\n   ", join("\n   ",%App::options), "\n";
 ok(%App::options, "put something in %App::options");
 is($App::options{prefix}, "/usr/local", "prefix = /usr/local");
@@ -30,8 +40,12 @@ is($App::options{var3}, "value3", "inline pattern match");
 is($App::options{var4}, undef,    "section excluded");
 is($App::options{var5}, "value5", "section exclusion ended");
 is($App::options{var6}, undef,    "section excluded again");
-is($App::options{var7}, "value7", "section included");
+is($App::options{var9}, "value9", "section included");
+is($App::options{var7}, "value7", "section included (regexp)");
 is($App::options{var8}, "value8", "ALL works");
+is($App::options{var11}, "value11", "default env var works");
+is($App::options{var12}, "value12", "specified env var works");
+is($App::options{var10}, "value10", "specified secondary env var works");
 
 %App::options = (
     config_file => "$dir/app.conf",

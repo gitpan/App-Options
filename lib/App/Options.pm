@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.2 2004/01/07 15:24:07 spadkins Exp $
+## $Id: Options.pm,v 1.3 2004/01/19 14:51:41 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -41,7 +41,7 @@ App::Options - combine command line options, environment vars, and option file v
                 option_file   => "~/.app/app.conf",         # set default
                 app           => "default=app;type=string", # default & type
                 app_path_info => {default=>"",type=>"string"}, # as a hashref
-                prefix        => "type=string;required",
+                prefix        => "type=string;required;env=PREFIX",
                 perlinc       => undef,         # no default
                 debug_options => "type=integer",
                 import        => "type=string",
@@ -124,7 +124,7 @@ distributions will be installed in release-specific locations.
                 option_file   => "~/.app/app.conf",         # set default
                 app           => "default=app;type=string", # default & type
                 app_path_info => {default=>"",type=>"string"}, # as a hashref
-                prefix        => "type=string;required",
+                prefix        => "type=string;required;env=PREFIX",
                 perlinc       => undef,         # no default
                 debug_options => "type=int",
                 import        => "type=string",
@@ -165,7 +165,7 @@ option variable is as follows.
         for this option
     type - if a value is provided, the program will not run unless
         the value matches the type ("string", "integer", "float",
-        "boolean", "date", "time", "datetime", regexp).
+        "boolean", "date", "time", "datetime", /regexp/).
     description - printed next to the option in the "usage" page
 
 The init() method stores command line options and option
@@ -230,6 +230,39 @@ sub init {
         $init_options{values} = $values;
     }
 
+    #######################################################################
+    # populate "option" (the information about each option!)
+    #######################################################################
+
+    my ($var, $value, @vars, $option);
+    $option = $init_options{option};
+
+    if ($option) {
+        croak "App::Options->init(): 'option' arg must be a hash reference"
+            if (ref($option) ne "HASH");
+
+        my (@args, $hash, $arg);
+        foreach $var (keys %$option) {
+            $value = $option->{$var};
+            if (ref($value) eq "") {
+                $hash = {};
+                $option->{$var} = $hash;
+                @args = split(/ *; */,$value);
+                foreach $arg (@args) {
+                    if ($arg =~ /^([^=]+)=(.*)$/) {
+                        $hash->{$1} = $2;
+                    }
+                    elsif (! defined $hash->{default}) {
+                        $hash->{default} = $arg;
+                    }
+                    else {
+                        $hash->{$arg} = 1;
+                    }
+                }
+            }
+        }
+    }
+
     #################################################################
     # we do all this within a BEGIN block because we want to get an
     # option file and update @INC so that it will be used by
@@ -245,7 +278,6 @@ sub init {
     # an option without an "=" (i.e. --help) acts as --help=1
     # Put the var/value pairs in %$values
     #################################################################
-    my ($var, $value);
     if (! $init_options{no_cmd_args}) {
         while ($#ARGV >= 0 && $ARGV[0] =~ /^--?([^=-][^=]*)(=?)(.*)/) {
             $var = $1;
@@ -315,7 +347,7 @@ sub init {
 
     $prefix = "." if (!$prefix);   # last resort: current directory
 
-    my ($env_var, @env_vars);
+    my ($env_var, @env_vars, $regexp);
     if (! $init_options{no_option_file}) {
         #################################################################
         # 5. Define the standard places to look for an option file
@@ -337,8 +369,8 @@ sub init {
         #################################################################
 
         local(*App::FILE);
-        my ($option_file, $exclude_section);
-        my ($regexp, $expr, @expr, $exclude);
+        my ($option_file, $exclude_section, $app_specified);
+        my ($cond, @cond, $exclude);
         while ($#option_file > -1) {
             $option_file = shift(@option_file);
             $exclude_section = 0;
@@ -348,19 +380,34 @@ sub init {
                 while (<App::FILE>) {
                     chomp;
                     # for lines that are like "[regexp]" or even "[regexp] var = value"
-                    # or "[regexp;var=value]" or "[regexp;var1=value1;var2=value2]"
+                    # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
                     if (s|^ *\[([^\[\]]*)\] *||) {
-                        @expr = split(/;/,$1);
-                        $regexp = undef;
-                        $exclude = 0;
-                        foreach $expr (@expr) {
-                            if ($expr =~ /^([^=]+)=(.*)$/) {  # a variable-based condition
-                                $exclude = ((defined $values->{$1} ? $values->{$1} : "") ne $2);
+                        @cond = split(/;/,$1);   # separate the conditions that must be satisfied
+                        $exclude = 0;            # assume the condition allows inclusion (! $exclude)
+                        $app_specified = 0;      # the app (program name) itself has not yet been specified
+                        foreach $cond (@cond) {  # check each condition
+                            if ($cond =~ /^([^=]+)=(.*)$/) {  # i.e. [city=ATL] or [name=/[Ss]tephen/]
+                                $var = $1;
+                                $value = $2;
+                                $app_specified = 1 if ($var eq "app");
                             }
-                            else {  # a program name regexp
-                                $regexp = $expr;
-                                $exclude = ($regexp ne "" && $regexp ne "ALL" && $app !~ m!^$regexp$!);
-                                $exclude = (!defined $regexp && $#expr > -1 && $exclude_section) if (!$exclude);
+                            else {              # i.e. [go] matches the program (app) named "go"
+                                $var = "app";
+                                $value = $cond;
+                                $app_specified = 1;
+                            }
+                            if ($value =~ m!^/(.*)/$!) {  # variable's value must match the regexp
+                                $regexp = $1;
+                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") !~ /$regexp/);
+                            }
+                            elsif ($var eq "app" && ($value eq "" || $value eq "ALL")) {
+                                $exclude = 0;   # "" and "ALL" are special wildcards for the "app" variable
+                            }
+                            else {  # a variable's value must match exactly
+                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value);
+                            }
+                            if (!$app_specified && !$exclude) {
+                                $exclude = ($#cond > -1 && $exclude_section);
                             }
                             last if ($exclude);
                         }
@@ -386,19 +433,28 @@ sub init {
                     if (/^([a-zA-Z0-9_.-]+) *= *(.*)/) {  # untainting also happens
                         $var = $1;
                         $value = $2;
-                        # TODO: quoting, var = " hello world "
+                        $value =~ s/^"(.*)"$/$1/;  # quoting, var = " hello world " (enables leading/trailing spaces)
+                        
                         # TODO: here documents, var = <<EOF
                         # only add values which have never been defined before
-                        if (!defined $values->{$var}) {
-                            if (! $init_options{no_env_vars}) {
-                                $env_var = "APP_" . uc($var);
+                        if (!defined $values->{$var} && !$init_options{no_env_vars}) {
+                            if ($option && $option->{$var}{env}) {
+                                @env_vars = split(/[,;]/, $option->{$var}{env});
+                            }
+                            else {
+                                @env_vars = ( "APP_" . uc($var) );
+                            }
+                            foreach $env_var (@env_vars) {
                                 if (defined $ENV{$env_var}) {
                                     $value = $ENV{$env_var};
+                                    last;
                                 }
                             }
                             # do variable substitutions, var = ${prefix}/bin
-                            $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
-                            $values->{$var} = $value;    # save all in %App::options
+                            if (defined $value) {
+                                $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                                $values->{$var} = $value;    # save all in %App::options
+                            }
                         }
                     }
                 }
@@ -409,41 +465,8 @@ sub init {
                     delete $values->{flush_imports};
                 }
                 if ($values->{import}) {
-                    unshift(@option_file, split(/[,:; ]+/, $values->{import}));
+                    unshift(@option_file, split(/[,; ]+/, $values->{import}));
                     delete $values->{import};
-                }
-            }
-        }
-    }
-
-    #################################################################
-    # 6b. convert $init_options{option} to deep hash
-    #################################################################
-
-    my (@vars, $option);
-    $option = $init_options{option};
-
-    if ($option) {
-        croak "App::Options->init(): 'option' arg must be a hash reference"
-            if (ref($option) ne "HASH");
-
-        my (@args, $hash, $arg);
-        foreach $var (keys %$option) {
-            $value = $option->{$var};
-            if (ref($value) eq "") {
-                $hash = {};
-                $option->{$var} = $hash;
-                @args = split(/ *; */,$value);
-                foreach $arg (@args) {
-                    if ($arg =~ /^([^=]+)=(.*)$/) {
-                        $hash->{$1} = $2;
-                    }
-                    elsif (! defined $hash->{default}) {
-                        $hash->{default} = $arg;
-                    }
-                    else {
-                        $hash->{$arg} = 1;
-                    }
                 }
             }
         }
@@ -467,15 +490,25 @@ sub init {
     foreach $var (@vars) {
         if (!defined $values->{$var}) {
             $value = $option ? $option->{$var}{default} : undef;
-            if (! $init_options{no_env_vars}) {
-                $env_var = "APP_" . uc($var);
-                if (defined $ENV{$env_var}) {
-                    $value = $ENV{$env_var};
+            if (!$init_options{no_env_vars}) {
+                if ($option && $option->{$var}{env}) {
+                    @env_vars = split(/[,;]/, $option->{$var}{env});
+                }
+                else {
+                    @env_vars = ( "APP_" . uc($var) );
+                }
+                foreach $env_var (@env_vars) {
+                    if (defined $ENV{$env_var}) {
+                        $value = $ENV{$env_var};
+                        last;
+                    }
                 }
             }
             # do variable substitutions, var = ${prefix}/bin
-            $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
-            $values->{$var} = $value;    # save all in %App::options
+            if (defined $value) {
+                $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                $values->{$var} = $value;    # save all in %App::options
+            }
         }
     }
 
@@ -589,8 +622,9 @@ sub init {
                     print "Error: \"$var\" must be of type \"$type\" (format \"HH:MM::SS\") (not \"$value\")\n";
                 }
             }
-            else {
-                if ($value !~ /$type/) {
+            elsif ($type =~ m!^/(.*)/$!) {
+                $regexp = $1;
+                if ($value !~ /$regexp/) {
                     $exit_status = 1;
                     print "Error: \"$var\" must match \"$type\" (not \"$value\")\n";
                 }
@@ -619,20 +653,24 @@ sub print_usage {
     my ($values, $init_options) = @_;
     print STDERR "Usage: $0 [options]\n";
     printf STDERR "       --%-32s print this message (also -?)\n", "help";
-    my (@vars);
+    my (@vars, $show_all, %option_seen);
     if ($init_options->{options}) {
         @vars = @{$init_options->{options}};
+        $show_all = 0 if (! defined $show_all);
     }
-    elsif ($init_options->{option}) {
-        @vars = (sort keys %{$init_options->{option}});
+    if ($init_options->{option} && ($show_all || $#vars == -1)) {
+        push(@vars, (sort keys %{$init_options->{option}}));
+        $show_all = 0 if (! defined $show_all);
     }
-    else {
-        @vars = (sort keys %$values);
+    if ($show_all || (!defined $show_all && $#vars == -1)) {
+        push(@vars, (sort keys %$values));
     }
     my ($var, $value, $type, $desc, $option);
     my ($var_str, $value_str, $type_str, $desc_str);
     $option = $init_options->{option} || {};
     foreach $var (@vars) {
+        next if ($option_seen{$var});
+        $option_seen{$var} = 1;
         next if ($var eq "?" || $var eq "help");
         $value = $values->{$var};
         $type  = $option->{$var}{type} || "";

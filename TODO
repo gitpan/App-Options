@@ -1,8 +1,14 @@
 ######################################################################
-## File: $Id: TODO,v 1.2 2004/01/07 15:24:07 spadkins Exp $
+## File: $Id: TODO,v 1.3 2004/01/19 14:51:40 spadkins Exp $
 ######################################################################
- o quoting, var = " hello world "
- o check list of configurable environment vars instead of "APP_${uc_var}"
+ o improve documentation
+ o enforce other option parsing rules (single letter + arg, single/double dash)
+ o option aliases/synonyms/alternates (i.e. -s = --silent)
+ o "strict" option: 0 = no strictness
+                    1 = [most strict] options from file not defined by program cause errors
+                    2 = silently don't include options from file not defined by program
+                    3 = unknown options cause error (program only can define options)
+                    4 = [slightly strict] unknown options cause error (file can define options),
  o write "prefix.pod"
  o figure out a way to do it outside the BEGIN block (i.e. use App::Options qw(:init))
  o here documents, var = <<EOF

@@ -1,6 +1,6 @@
 
 ######################################################################
-## File: $Id: Makefile.PL,v 1.2 2004/01/07 15:24:07 spadkins Exp $
+## File: $Id: Makefile.PL,v 1.3 2004/01/19 14:51:40 spadkins Exp $
 ######################################################################
 
 use ExtUtils::MakeMaker;
@@ -14,7 +14,7 @@ my @programs = (
 %opts = (
     'NAME'        => 'App-Options',
     'DISTNAME'    => 'App-Options',
-    'VERSION'     => '0.61',
+    'VERSION'     => '0.62',
     'EXE_FILES'   => [ @programs ],
     'dist'        => {'COMPRESS'=>'gzip -9f', 'SUFFIX' => 'gz',
                       'ZIP'=>'/usr/bin/zip','ZIPFLAGS'=>'-rl'},
