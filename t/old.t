@@ -1,34 +1,34 @@
 #!/usr/local/bin/perl -w
 
-BEGIN {
-    $ENV{VAR10} = "value10";
-    $ENV{APP_VAR11} = "value11";
-    $ENV{VAR12} = "value12";
-    delete $ENV{PREFIX};
-    delete $ENV{DOCUMENT_ROOT};
-}
-
 use Test::More qw(no_plan);
 use lib "lib";
 use lib "../lib";
+
+use_ok("App::Options");
 
 my ($dir);
 
 $dir = ".";
 $dir = "t" if (! -f "app.conf");
 
-use App::Options (
+delete $ENV{PREFIX};
+delete $ENV{DOCUMENT_ROOT};
+
+$ENV{VAR10} = "value10";
+$ENV{APP_VAR11} = "value11";
+$ENV{VAR12} = "value12";
+
+App::Options->init(
     option => {
         var10 => { env => "VAR10a;VAR10", },
         var11 => { },
         var12 => { env => "VAR12", },
     },
 );
-
 #print "CONF:\n   ", join("\n   ",%App::options), "\n";
 ok(%App::options, "put something in %App::options");
 is($App::options{prefix}, "/usr/local", "prefix = /usr/local");
-is($App::options{app}, "main", "app = main");
+is($App::options{app}, "old", "app = old");
 is($App::options{var}, "value", "var = value");
 is($App::options{var1}, "pattern match", "pattern match");
 is($App::options{var2}, "old pattern match", "old pattern match");
@@ -57,7 +57,7 @@ App::Options->init();
 #print "CONF:\n   ", join("\n   ",%App::options), "\n";
 ok(%App::options, "put something in %App::options");
 is($App::options{prefix}, "/usr/local", "prefix = /usr/local");
-is($App::options{app}, "main", "app = main");
+is($App::options{app}, "old", "app = old");
 is($App::options{var}, "value", "var = value");
 is($App::options{var1}, "pattern match", "pattern match");
 is($App::options{var2}, "old pattern match", "old pattern match");
@@ -67,7 +67,7 @@ App::Options->init(\%App::otherconf);
 #print "CONF:\n   ", join("\n   ",%App::otherconf), "\n";
 ok(%App::otherconf, "put something in %App::otherconf");
 is($App::otherconf{prefix}, "/usr/local", "prefix = /usr/local");
-is($App::otherconf{app}, "main", "app = main");
+is($App::otherconf{app}, "old", "app = old");
 is($App::otherconf{var}, "value", "var = value");
 is($App::otherconf{var1}, "pattern match", "pattern match");
 is($App::otherconf{var2}, "old pattern match", "old pattern match");
@@ -76,7 +76,7 @@ App::Options->init(values => \%App::options3);
 #print "CONF:\n   ", join("\n   ",%App::options3), "\n";
 ok(%App::options3, "put something in %App::options3");
 is($App::options3{prefix}, "/usr/local", "prefix = /usr/local");
-is($App::options3{app}, "main", "app = main");
+is($App::options3{app}, "old", "app = old");
 is($App::options3{var}, "value", "var = value");
 is($App::options3{var1}, "pattern match", "pattern match");
 is($App::options3{var2}, "old pattern match", "old pattern match");

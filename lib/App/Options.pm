@@ -1,13 +1,16 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.4 2004/01/30 15:15:07 spadkins Exp $
+## $Id: Options.pm,v 1.6 2004/02/19 16:17:15 spadkins Exp $
 #############################################################################
 
 package App::Options;
 
+use vars qw($VERSION);
 use strict;
 
 use Carp;
+
+$VERSION = "0.90";
 
 =head1 NAME
 
@@ -17,10 +20,7 @@ App::Options - combine command line options, environment vars, and option file v
 
     #!/usr/local/bin/perl
 
-    BEGIN {
-        use App::Options;
-        App::Options->init();  # reads option values into %App::options by default
-    }
+    use App::Options;   # reads option values into %App::options by default
 
     # do something with the options (in %App::options)
     use DBI;
@@ -116,7 +116,7 @@ See the P5EE web sites for more information on the P5EE project.
     http://www.officevision.com/pub/p5ee
     http://p5ee.perl.org
 
-=head1 REFERENCE: Methods
+=head1 API REFERENCE: Methods
 
 =cut
 
@@ -159,41 +159,47 @@ See the P5EE web sites for more information on the P5EE project.
     * Throws: "App::Options->init(): 'options' arg must be an array reference"
     * Since:  0.60
 
-    Sample Usage: 
+    Sample Usage: (normal)
+
+    use App::Options;       # invokes init() automatically via import()
+
+    This is functionally equivalent to the following, but that's not
+    near as nice to write at the top of your programs.
 
     BEGIN {
-        use App::Options;
-        App::Options->init();
+        use App::Options qw(none);  # import() does not call init()
+        App::Options->init();       # we call init() manually
     }
 
-    ... or, to use every option available ...
+    Or we could have used a more full-featured version ...
 
-    BEGIN {
-        use App::Options;
-        App::Options->init(
-            values => \%MyPackage::options,
-            options => [ "option_file", "prefix", "app", "app_path_info",
-                         "perlinc", "debug_options", "import", ],
-            option => {
-                option_file   => "~/.app/app.conf",         # set default
-                app           => "default=app;type=string", # default & type
-                app_path_info => {default=>"",type=>"string"}, # as a hashref
-                prefix        => "type=string;required;env=PREFIX",
-                perlinc       => undef,         # no default
-                debug_options => "type=int",
-                import        => "type=string",
-                flush_imports => 1,
-            },
-            no_cmd_args => 1,
-            no_env_vars => 1,
-            no_option_file => 1,
-            print_usage => sub { my ($values, $init_args) = @_; print "Use it right!\n"; },
-        );
-    }
+    App::Options->init(
+        values => \%MyPackage::options,
+        options => [ "option_file", "prefix", "app", "app_path_info",
+                     "perlinc", "debug_options", "import", ],
+        option => {
+            option_file   => "~/.app/app.conf",         # set default
+            app           => "default=app;type=string", # default & type
+            app_path_info => {default=>"",type=>"string"}, # as a hashref
+            prefix        => "type=string;required;env=PREFIX",
+            perlinc       => undef,         # no default
+            debug_options => "type=int",
+            import        => "type=string",
+            flush_imports => 1,
+        },
+        no_cmd_args => 1,
+        no_env_vars => 1,
+        no_option_file => 1,
+        print_usage => sub { my ($values, $init_args) = @_; print "Use it right!\n"; },
+    );
+
+The init() method is usually called during the import() operation
+when the normal usage ("use App::Options;") is invoked.
 
 The init() method reads the command line args (@ARGV),
 then finds an options file, and loads it, all in a way which
-can be done in a BEGIN block.  This is important to be able
+can be done in a BEGIN block (minimal dependencies).  This is
+important to be able
 to modify the @INC array so that normal "use" and "require"
 statements will work with the configured @INC path.
 
@@ -740,21 +746,31 @@ sub init {
     }
 }
 
+sub import {
+    my ($self, @args) = @_;
+    if ($#args % 2 == 1) {
+        $self->init(@args);
+    }
+}
+
 sub print_usage {
     shift if ($#_ > -1 && $_[0] eq "App::Options");
     my ($values, $init_args) = @_;
+    $values = {} if (!$values);
+    $init_args = {} if (!$init_args);
+
     print STDERR "Usage: $0 [options]\n";
     printf STDERR "       --%-32s print this message (also -?)\n", "help";
     my (@vars, $show_all, %option_seen);
+    $show_all = $init_args->{show_all};
+    $show_all = 1 if (!defined $show_all);
     if ($init_args->{options}) {
         @vars = @{$init_args->{options}};
-        $show_all = 0 if (! defined $show_all);
     }
-    if ($init_args->{option} && ($show_all || $#vars == -1)) {
+    if ($init_args->{option}) {
         push(@vars, (sort keys %{$init_args->{option}}));
-        $show_all = 0 if (! defined $show_all);
     }
-    if ($show_all || (!defined $show_all && $#vars == -1)) {
+    if ($show_all) {
         push(@vars, (sort keys %$values));
     }
     my ($var, $value, $type, $desc, $option);
@@ -775,23 +791,27 @@ sub print_usage {
     }
 }
 
-=head1 FLOW: OPTION PROCESSING DETAILS
+=head1 LOGIC FLOW: OPTION PROCESSING DETAILS
 
 Basic Concept - By calling App::Options->init(),
 your program parses the command line, environment variables,
 and option files, and puts var/value pairs into a
 global option hash, %App::options.
+Just include the following at the top of your program
+in order to imbue it with many valuable option-setting
+capabilities.
 
-    BEGIN {
-        use App::Options;
-        App::Options->init();
-    }
+    use App::Options;
+
+When you "use" the App::Options module, the import() method
+is called automatically.  This calls the init() method,
+passing along all of its parameters.
 
 One of the args to init() is the "values" arg, which allows
 for a different hash to be specified as the target of all
 option variables and values.
 
-    App::Options->init(values => \%Mymodule::opts);
+    use App::Options (values => \%Mymodule::opts);
 
 Throughout the following description of option processing,
 the %App::options hash may be referred to as the "options hash".
@@ -1059,7 +1079,7 @@ Options can be defined for the program with either the
 "options" arg or the "option" arg to the init() method
 (or a combination of both).
 
-    App::Options->init(
+    use App::Options (
         options => [ "dbname", "dbuser", "dbpass" ],
         option => {
             dbname => {
@@ -1169,17 +1189,14 @@ If the options fail any of the "required" or "type" validation
 tests, the App::Options::print_usage() function is called
 to print out a usage statement and the program is exited.
 
-=head1 TUTORIAL
+=head1 USAGE TUTORIAL
 
 =head2 Getting Started
 
 Create a perl program called "demo1".
 
     #!/usr/bin/perl
-    BEGIN {
-        use App::Options;
-        App::Options->init();            # call this method
-    }
+    use App::Options;
     print "Wow. Here are the options...\n";
     foreach (sort keys %App::options) {  # options appear here!
         printf("%-20s => %s\n", $_, $App::options{$_});
@@ -1261,10 +1278,7 @@ in a customer table.
 We call this program "listcust".
 
     #!/usr/local/bin/perl
-    BEGIN {
-        use App::Options;
-        App::Options->init();
-    }
+    use App::Options;
     use strict;
     use DBI;
     my $dsn = "dbi:$App::options{dbdriver}:database=$App::options{dbname}";
@@ -1308,17 +1322,14 @@ print something intelligent.
 A developer, however, might decide that the program should
 have some defaults.
 
-    BEGIN {
-        use App::Options;
-        App::Options->init(
-            option => {
-                dbdriver => "mysql",
-                dbname   => "prod",
-                dbuser   => "scott",
-                dbpass   => "tiger",
-            },
-        );
-    }
+    use App::Options (
+        option => {
+            dbdriver => "mysql",
+            dbname   => "prod",
+            dbuser   => "scott",
+            dbpass   => "tiger",
+        },
+    );
 
 (This supplies defaults and also makes "--help" print something
 intelligent, regardless of whether there are any configuration
@@ -1330,17 +1341,14 @@ attributes of an option besides just the "default".
 To use those, you generally would use the more complete form
 of the "option" arg.
 
-    BEGIN {
-        use App::Options;
-        App::Options->init(
-            option => {
-                dbdriver => { default => "mysql", },
-                dbname   => { default => "prod",  },
-                dbuser   => { default => "scott", },
-                dbpass   => { default => "tiger", },
-            },
-        );
-    }
+    use App::Options (
+        option => {
+            dbdriver => { default => "mysql", },
+            dbname   => { default => "prod",  },
+            dbuser   => { default => "scott", },
+            dbpass   => { default => "tiger", },
+        },
+    );
 
 Then we can indicate that these options are all required.
 If they are not provided, the program will not run.
@@ -1350,17 +1358,14 @@ password.  We can remove the default, but if we ever tried to run
 the program without providing the password, it would not get
 past printing a "usage" statement.
 
-    BEGIN {
-        use App::Options;
-        App::Options->init(
-            option => {
-                dbdriver => { required => 1, default => "mysql", },
-                dbname   => { required => 1, default => "prod",  },
-                dbuser   => { required => 1, default => "scott", },
-                dbpass   => { required => 1, },
-            },
-        );
-    }
+    use App::Options (
+        option => {
+            dbdriver => { required => 1, default => "mysql", },
+            dbname   => { required => 1, default => "prod",  },
+            dbuser   => { required => 1, default => "scott", },
+            dbpass   => { required => 1, },
+        },
+    );
 
 We now might enhance the code in order to list only the 
 customers which had certain attributes.
@@ -1389,62 +1394,59 @@ Also, the order that the options are printed by "--help" can
 be set with the "options" argument.  (Otherwise, they would
 print in alphabetical order.)
 
-    BEGIN {
-        use App::Options;
-        App::Options->init(
-            options => [ "dbdriver", "dbname", "dbuser", "dbpass",
-                "first_name", "last_name", "birth_dt", "company_id",
-                "wholesale_ind", "change_dttm",
-            ],
-            option => {
-                dbdriver => {
-                    description => "dbi driver name",
-                    default => "mysql",
-                    env => "DBDRIVER",  # use a different env variable
-                    required => 1,
-                },
-                dbname   => {
-                    description => "database name",
-                    default => "prod", 
-                    env => "DBNAME",  # use a different env variable
-                    required => 1,
-                },
-                dbuser   => {
-                    description => "database user",
-                    default => "scott",
-                    env => "DBUSER;DBI_USER",  # check both
-                    required => 1,
-                },
-                dbpass   => {
-                    description => "database password",
-                    env => "",  # disable env for password (insecure)
-                    required => 1,
-                },
-                first_name => {
-                    description => "portion of customer's first name",
-                },
-                last_name  => {
-                    description => "portion of customer's last name",
-                },
-                birth_dt   => {
-                    description => "customer's birth date",
-                    type => "date",
-                },
-                company_id => {
-                    description => "customer's company ID",
-                    type => "integer",
-                },
-                wholesale_ind => {
-                    description => "indicator of wholesale customer",
-                    type => "/^[YN]$/",
-                },
-                change_dttm => {
-                    description => "changed-since date/time",
-                    type => "datetime",
-                },
+    use App::Options (
+        options => [ "dbdriver", "dbname", "dbuser", "dbpass",
+            "first_name", "last_name", "birth_dt", "company_id",
+            "wholesale_ind", "change_dttm",
+        ],
+        option => {
+            dbdriver => {
+                description => "dbi driver name",
+                default => "mysql",
+                env => "DBDRIVER",  # use a different env variable
+                required => 1,
             },
-        );
-    }
+            dbname   => {
+                description => "database name",
+                default => "prod", 
+                env => "DBNAME",  # use a different env variable
+                required => 1,
+            },
+            dbuser   => {
+                description => "database user",
+                default => "scott",
+                env => "DBUSER;DBI_USER",  # check both
+                required => 1,
+            },
+            dbpass   => {
+                description => "database password",
+                env => "",  # disable env for password (insecure)
+                required => 1,
+            },
+            first_name => {
+                description => "portion of customer's first name",
+            },
+            last_name  => {
+                description => "portion of customer's last name",
+            },
+            birth_dt   => {
+                description => "customer's birth date",
+                type => "date",
+            },
+            company_id => {
+                description => "customer's company ID",
+                type => "integer",
+            },
+            wholesale_ind => {
+                description => "indicator of wholesale customer",
+                type => "/^[YN]$/",
+            },
+            change_dttm => {
+                description => "changed-since date/time",
+                type => "datetime",
+            },
+        },
+    );
 
 It should be noted in the example above that the default environment
 variable name ("APP_${varname}") has been overridden for some of 
@@ -1454,29 +1456,29 @@ from either "DBUSER" or "DBI_USER".
 
 It should also be noted that if only the order of the options rather
 than all of their attributes were desired, the following could
-have been used.  Using the "options" arg
-limits the printing of options to only those listed unless the
-"show_all" argument is also given.  Supplying the "show_all"
-argument allows for all options set in the option files also
-to be printed.
+have been used. 
 
-    BEGIN {
-        use App::Options;
-        App::Options->init(
-            options => [ "dbdriver", "dbname", "dbuser", "dbpass",
-                "first_name", "last_name", "birth_dt", "company_id",
-                "wholesale_ind", "change_dttm",
-            ],
-            show_all => 1,
-        );
-    }
+    use App::Options (
+        options => [ "dbdriver", "dbname", "dbuser", "dbpass",
+            "first_name", "last_name", "birth_dt", "company_id",
+            "wholesale_ind", "change_dttm",
+        ],
+        show_all => 0,
+    );
+
+Using the "options" arg causes the options to
+be printed in the order given in the "--help" output.  Then the
+remaining options defined in the "option" arg are printed in 
+alphabetical order.  Finally, all other options which are set
+on the command line or in option files are printed unless
+the "show_all => 0" argument is provided.
 
 If, for some reason, the program needed to put the options
 into a different option hash (instead of %App::options) or directly
 specify the option file to use (disregarding the standard option
 file search path), it may do so using the following syntax.
 
-    App::Options->init(
+    use App::Options (
         values => \%Mymodule::opts,
         option_file => "/path/to/options.conf",
     );
@@ -1486,7 +1488,7 @@ of the sources for options, it can do so with one of the
 following arguments.  Of course, inhibiting all three would
 be a bit silly.
 
-    App::Options->init(
+    use App::Options (
         no_cmd_args => 1,
         no_option_file => 1,
         no_env_vars => 1,

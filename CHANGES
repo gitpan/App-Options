@@ -2,6 +2,14 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.64
+ x added $VERSION to App::Options (use VERSION_FROM in Makefile.PL)
+ x fixed bug where "show_all" wasn't showing all on --help
+ x touched up titles on pod documentation
+ x implement import() method to use module outside the BEGIN block (i.e. use App::Options (@args))
+ x update documentation with new syntax using import() method
+ x improve show_all logic: show_all = 1 by default always unless overridden
+
 VERSION 0.63
  x improve documentation (api reference, logic flow, usage tutorial)
  x "integer" type now matches integers with underscores (i.e. 1_000_000)
