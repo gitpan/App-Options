@@ -4,6 +4,8 @@ BEGIN {
     $ENV{VAR10} = "value10";
     $ENV{APP_VAR11} = "value11";
     $ENV{VAR12} = "value12";
+    $ENV{ZZ} = "zz";
+    $ENV{APP_PLUGH} = "twisty passages";
     delete $ENV{PREFIX};
     delete $ENV{DOCUMENT_ROOT};
 }
@@ -80,6 +82,17 @@ is($App::options3{app}, "main", "app = main");
 is($App::options3{var}, "value", "var = value");
 is($App::options3{var1}, "pattern match", "pattern match");
 is($App::options3{var2}, "old pattern match", "old pattern match");
+
+# hostname/host tests
+ok($App::options{hostname}, "hostname option set");
+ok($App::options{host}, "host option set");
+ok(length($App::options{host}) <= length($App::options{hostname}) && $App::options{host} !~ /\./,
+    "host option shorter than hostname option");
+ok(! defined $App::options{hosttest}, "host not named xyzzy3");
+
+# $ENV{X} variable substitution tests
+ok($App::options{envtest} eq "xyzzy", "\$ENV{X} variable substitution worked");
+ok($App::options{plugh} eq "twisty passages", "auto-import of APP_ env vars worked");
 
 exit 0;
 

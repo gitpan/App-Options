@@ -2,6 +2,20 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.92
+ x cleaned up some warnings which appeared under -w (concatenation of undef)
+ x add system-supplied hostname and host options
+ x variable substitution works with environment vars (url = http://$ENV{HOST})
+ x auto-import of environment vars named "APP_*" even if not otherwise defined
+ x usage: undefined values appear as "[undef]" rather than "[]"
+ x usage: options appear as "--var=<value>" rather than "--var=<var>"
+ x usage: "args_description" describes what's left on cmd line after options removed
+ x usage: "value_description" describes option value (instead of "<value>")
+ x added an examples directory
+ x added a benchmark directory
+ x default is $Config{prefix} instead of /usr/local
+ x improve debug_options (env vars, etc.) (implemented 6 levels of debug_options)
+
 VERSION 0.91
  x show_all is off by default whenever "option" or "options" used
  x remove app_path_info
@@ -65,5 +79,5 @@ VERSION 0.62
    "path" variable to be set from the "PATH" environment variable.)
 
 VERSION 0.61
- o Initial release
+ x Initial release
 

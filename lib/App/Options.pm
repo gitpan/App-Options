@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.8 2004/09/02 21:06:57 spadkins Exp $
+## $Id: Options.pm,v 1.10 2004/12/28 22:32:44 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -9,6 +9,10 @@ use vars qw($VERSION);
 use strict;
 
 use Carp;
+use Sys::Hostname;
+use Cwd 'abs_path';
+use File::Spec;
+use Config;
 
 $VERSION = "0.91";
 
@@ -198,7 +202,6 @@ See the P5EE web sites for more information on the P5EE project.
         option => {
             option_file   => "~/.app/app.conf",         # set default
             app           => "default=app;type=string", # default & type
-            app_path_info => {default=>"",type=>"string"}, # as a hashref
             prefix        => "type=string;required;env=PREFIX",
             perlinc       => undef,         # no default
             debug_options => "type=int",
@@ -235,6 +238,10 @@ The following named arguments are understood by the init() method.
     show_all - force showing all options in "--help" even when
              "options" list specified
     print_usage - provide an alternate print_usage() function
+    args_description - provide descriptive text for what the args
+             of the program are (command line args after the options).
+             This is printed in the usage page (--help or -?).
+             By default, it is simply "[args]".
 
 The additional information that can be specified about any individual
 option variable using the "option" arg above is as follows.
@@ -245,10 +252,13 @@ option variable using the "option" arg above is as follows.
         for this option
     type - if a value is provided, the program will not run unless
         the value matches the type ("string", "integer", "float",
-        "boolean", "date", "time", "datetime", /regexp/).
+        "boolean", "date", "time", "datetime", "/regexp/").
     env - a list of semicolon-separated environment variable names
         to be used to find the value instead of "APP_{VARNAME}".
     description - printed next to the option in the "usage" page
+    value_description - printed within angle brackets ("<>") in the
+        "usage" page as the description of the option value
+        (i.e. --option_name=<value_description>)
 
 The init() method stores command line options and option
 file values all in the global %App::options hash (unless the
@@ -271,7 +281,7 @@ The special options are as follows.
        set explicitly, it is detected from the following places:
           1. PREFIX environment variable
           2. the real path of the program with /bin or /cgi-bin stripped
-          3. /usr/local
+          3. /usr/local (or whatever "prefix" perl was compiled with)
        If it is autodetected from one of those three places, that is
        only provisional, in order to find the "option_file".  The "prefix"
        variable should be set authoritatively in the "option_file" if it
@@ -284,15 +294,32 @@ The special options are as follows.
     debug_options - if this is set, a variety of debug information is
        printed out during the option processing.  This helps in debugging
        which option files are being used and what the resulting variable
-       values are.
+       values are.  The following numeric values are defined.
+
+          1 = print the basic steps of option processing and resulting @INC
+          2 = print each option file searched for and found and final values
+          3 = print each value as it is set in the option hash
+          4 = print overrides from ENV and variable substitutions
+          5 = print each line of each file with exclude_section indicator
+          6 = print option file section tags, condition evaluation, and
+              each value found (even if it is not set in the final values)
 
     import - a list of additional option files to be processed.
        An imported file goes on the head of the queue of files to be
        processed.
 
+    hostname - the hostname as returned by the hostname() function
+       provided by Sys::Hostname (may or may not include domain
+       qualifiers as a fully qualified domain name).
+
+    host - same as hostname, but with any trailing domain name removed.
+       (everything after the first ".")
+
     flush_imports - flush all pending imported option files.
 
 =cut
+
+my (@options);
 
 sub init {
     # can call as a function (&App::Options::init()) or a static method (App::Options->init())
@@ -354,22 +381,36 @@ sub init {
     #################################################################
 
     #################################################################
+    # 0. Set system-supplied values (i.e. hostname/host)
+    #################################################################
+    my $host = hostname;
+    $values->{hostname} = $host;
+    $host =~ s/\..*//;   # get rid of extra domain name qualifiers
+    $values->{host} = $host;
+
+    #################################################################
     # 1. Read the command-line options
     # (anything starting with one or two dashes is an option var
     # i.e. --debugmode=record  -debugmode=replay
     # an option without an "=" (i.e. --help) acts as --help=1
     # Put the var/value pairs in %$values
     #################################################################
+    my $debug_options = $values->{debug_options} || 0;
     if (! $init_args{no_cmd_args}) {
         while ($#ARGV >= 0 && $ARGV[0] =~ /^--?([^=-][^=]*)(=?)(.*)/) {
             $var = $1;
             $value = ($2 eq "") ? 1 : $3;
-            shift @ARGV;
+            push(@options, shift @ARGV);
             $values->{$var} = $value;
         }
         if ($#ARGV >= 0 && $ARGV[0] eq "--") {
             shift @ARGV;
         }
+        $debug_options = $values->{debug_options} || 0;
+        print STDERR "1. Parsed Command Line Options. [@options]\n" if ($debug_options);
+    }
+    else {
+        print STDERR "1. Skipped Command Line Option Parsing.\n" if ($debug_options);
     }
 
     #################################################################
@@ -377,16 +418,28 @@ sub init {
     #    we will use this directory to search for the
     #    option file.
     #################################################################
+    my $is_unix = 1;  # pretend we are not on Unix (use File::Spec)
+
+    my $prog_cat = "";                   # start with no catalog
     my $prog_dir = $0;                   # start with the full script path
-    if ($prog_dir =~ m!^/!) {            # absolute path
+    if ($is_unix) {
+        if ($prog_dir =~ m!^/!) {            # absolute path
+            # i.e. /usr/local/bin/app, /app
+            $prog_dir =~ s!/[^/]+$!!;        # trim off the program name
+        }
+        else {                               # relative path
+            # i.e. app, ./app, ../bin/app, bin/app
+            $prog_dir =~ s!/?[^/]+$!!;       # trim off the program name
+            $prog_dir = "." if (!$prog_dir); # if nothing left, directory is current dir
+        }
+    }
+    else {
         # i.e. /usr/local/bin/app, /app
-        $prog_dir =~ s!/[^/]+$!!;        # trim off the program name
+        my ($file);
+        ($prog_cat, $prog_dir, $file) = File::Spec->splitpath($prog_dir);
     }
-    else {                               # relative path
-        # i.e. app, ./app, ../bin/app, bin/app
-        $prog_dir =~ s!/?[^/]+$!!;       # trim off the program name
-        $prog_dir = "." if (!$prog_dir); # if nothing left, directory is current dir
-    }
+    print STDERR "2. Found Directory of Program. catalog=[$prog_cat] dir=[$prog_dir]\n"
+        if ($debug_options);
 
     #################################################################
     # 3. guess the "prefix" directory for the entire
@@ -394,25 +447,35 @@ sub init {
     #    $prefix/bin or $prefix/cgi-bin.
     #################################################################
     my $prefix = $values->{prefix};  # possibly set on command line
+    my $prefix_origin = "command line";
 
     # it can be set in environment.
     # This is the preferred way for Registry and PerlRun webapps.
-    $prefix = $ENV{PREFIX} if (!$prefix && $ENV{PREFIX});
+    if (!$prefix && $ENV{PREFIX}) {
+        $prefix = $ENV{PREFIX};
+        $prefix_origin = "environment";
+    }
 
     # Using "abs_path" gets rid of all symbolic links and gives the real path
     # to the directory in which the script runs.
     if (!$prefix) {
-        use Cwd 'abs_path';
         my $abs_prog_dir = abs_path($prog_dir);
         if ($abs_prog_dir =~ s!/bin$!!) {
             $prefix = $abs_prog_dir;
+            $prefix_origin = "parent of bin dir";
         }
         elsif ($abs_prog_dir =~ s!/cgi-bin.*$!!) {
             $prefix = $abs_prog_dir;
+            $prefix_origin = "parent of cgi-bin dir";
         }
     }
 
-    $prefix = "/usr/local" if (!$prefix);   # last resort: current directory
+    if (!$prefix) {   # last resort: perl's prefix
+        $prefix = $Config{prefix};
+        $prefix_origin = "perl prefix";
+    }
+    print STDERR "3. Provisional prefix Set. prefix=[$prefix] origin=[$prefix_origin]\n"
+        if ($debug_options);
 
     #################################################################
     # 4. find the app.
@@ -421,24 +484,34 @@ sub init {
     #    first part of the PATH_INFO
     #################################################################
     my $app = $values->{app};
-    my $path_info = $ENV{PATH_INFO} || "";
-    $path_info =~ s!/+$!!;    # strip off trailing slashes ("/")
+    my $app_origin = "command line";
     if (!$app) {
-        if ($path_info && $path_info =~ s!^/([^/]+)!!) {
+        my $path_info = $ENV{PATH_INFO} || "";
+        $path_info =~ s!/+$!!;    # strip off trailing slashes ("/")
+        if ($path_info && $path_info =~ m!^/([^/]+)!) {
             my $path_info_app = $1;  # first part of PATH_INFO (without slashes)
-            if ( ($ENV{HOME} && -f "$ENV{HOME}/.app/$path_info_app.conf") ||
-                 (-f "$prog_dir/$path_info_app.conf") ||
-                 (-f "$prefix/etc/app/$path_info_app.conf") ) {
+            if ($ENV{HOME} && -f "$ENV{HOME}/.app/$path_info_app.conf") {
                 $app = $path_info_app;
+                $app_origin = "PATH_INFO=$path_info matches $ENV{HOME}/.app/$path_info_app.conf";
+            }
+            elsif (-f "$prog_dir/$path_info_app.conf") {
+                $app = $path_info_app;
+                $app_origin = "PATH_INFO=$path_info matches $prog_dir/$path_info_app.conf";
+            }
+            elsif (-f "$prefix/etc/app/$path_info_app.conf") {
+                $app = $path_info_app;
+                $app_origin = "PATH_INFO=$path_info matches $prefix/etc/app/$path_info_app.conf";
             }
         }
         if (!$app) {
             $app = $0;            # start with the full script path
             $app =~ s!.*/!!;      # strip off leading path
             $app =~ s/\.[^.]+$//; # strip off trailing file type (i.e. ".pl")
+            $app_origin = "program name ($0)";
         }
         $values->{app} = $app;
     }
+    print STDERR "4. Set app variable. app=[$app] origin=[$app_origin]\n" if ($debug_options);
 
     my ($env_var, @env_vars, $regexp);
     if (! $init_args{no_option_file}) {
@@ -451,31 +524,35 @@ sub init {
         push(@option_file, "$ENV{HOME}/.app/app.conf") if ($ENV{HOME});
         push(@option_file, "$prog_dir/$app.conf") if ($app ne "app");
         push(@option_file, "$prog_dir/app.conf");
-        push(@option_file, "$prefix/etc/app/$app.conf") if ($app ne "app");
-        push(@option_file, "$prefix/etc/app/app.conf");
+        push(@option_file, "\${prefix}/etc/app/$app.conf") if ($app ne "app");
+        push(@option_file, "\${prefix}/etc/app/app.conf");
         push(@option_file, "/etc/app/app.conf");
 
         #################################################################
-        # 6. now actually read in the file(s)
+        # 5. now actually read in the file(s)
         #    we read a set of standard files, and
         #    we may continue to read in additional files if they
         #    are indicated by an "import" line
         #################################################################
+        print STDERR "5. Scanning Option Files\n" if ($debug_options);
 
         local(*App::Options::FILE);
         my ($option_file, $exclude_section);
         my ($cond, @cond, $exclude);
         while ($#option_file > -1) {
             $option_file = shift(@option_file);
+            $option_file =~ s!\$\{prefix\}!$prefix!;
             $exclude_section = 0;
-            print STDERR "Looking for option file [$option_file]\n" if ($values->{debug_options});
+            print STDERR "   Looking for Option File [$option_file]\n" if ($debug_options >= 2);
             if (open(App::Options::FILE, "< $option_file")) {
-                print STDERR "Found option file [$option_file]\n" if ($values->{debug_options});
+                print STDERR "   Found Option File [$option_file]\n" if ($debug_options >= 2);
                 while (<App::Options::FILE>) {
                     chomp;
+                    print STDERR "   [$exclude_section] $_\n" if ($debug_options >= 5);
                     # for lines that are like "[regexp]" or even "[regexp] var = value"
                     # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
                     if (s|^ *\[([^\[\]]*)\] *||) {
+                        print STDERR "     Section : [$1]\n" if ($debug_options >= 6);
                         @cond = split(/;/,$1);   # separate the conditions that must be satisfied
                         $exclude = 0;            # assume the condition allows inclusion (! $exclude)
                         foreach $cond (@cond) {  # check each condition
@@ -490,12 +567,18 @@ sub init {
                             if ($value =~ m!^/(.*)/$!) {  # variable's value must match the regexp
                                 $regexp = $1;
                                 $exclude = ((defined $values->{$var} ? $values->{$var} : "") !~ /$regexp/);
+                                print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) regexp=[$regexp]\n"
+                                    if ($debug_options >= 6);
                             }
                             elsif ($var eq "app" && ($value eq "" || $value eq "ALL")) {
                                 $exclude = 0;   # "" and "ALL" are special wildcards for the "app" variable
+                                print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) ALL\n"
+                                    if ($debug_options >= 6);
                             }
                             else {  # a variable's value must match exactly
                                 $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value);
+                                print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) equals\n"
+                                    if ($debug_options >= 6);
                             }
                             last if ($exclude);
                         }
@@ -523,6 +606,8 @@ sub init {
                         $var = $1;
                         $value = $2;
                         $value =~ s/^"(.*)"$/$1/;  # quoting, var = " hello world " (enables leading/trailing spaces)
+
+                        print STDERR "       Var Found in File : var=[$var] value=[$value]\n" if ($debug_options >= 6);
                         
                         # TODO: here documents, var = <<EOF
                         # only add values which have never been defined before
@@ -542,13 +627,20 @@ sub init {
                                 foreach $env_var (@env_vars) {
                                     if ($env_var && defined $ENV{$env_var}) {
                                         $value = $ENV{$env_var};
+                                        print STDERR "       Override File Value from Env : var=[$var] value=[$value] from [$env_var] of [@env_vars]\n" if ($debug_options >= 4);
                                         last;
                                     }
                                 }
                             }
-                            # do variable substitutions, var = ${prefix}/bin
+                            # do variable substitutions, var = ${prefix}/bin, var = $ENV{PATH}
                             if (defined $value) {
-                                $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                                if ($value =~ /\{.*\}/) {
+                                    $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                                    $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
+                                    print STDERR "       File Var Underwent Substitutions : [$var] = [$value]\n"
+                                        if ($debug_options >= 4);
+                                }
+                                print STDERR "       File Var : var=[$var] value=[$value]\n" if ($debug_options >= 3);
                                 $values->{$var} = $value;    # save all in %App::options
                             }
                         }
@@ -566,72 +658,151 @@ sub init {
                 }
             }
         }
+        $debug_options = $values->{debug_options} || 0;
+    }
+    else {
+        print STDERR "5. Skip Option File Processing\n" if ($debug_options);
     }
 
     #################################################################
-    # 6c. fill in ENV vars and defaults
+    # 6. fill in ENV vars and defaults
     #################################################################
 
-    @vars = ();
-    if ($init_args{options}) {
-        croak "App::Options->init(): 'options' arg must be an array reference"
-            if (ref($init_args{options}) ne "ARRAY");
-        push(@vars, @{$init_args{options}});
-    }
+    if (!$init_args{no_env_vars}) {
+        @vars = ();
+        if ($init_args{options}) {
+            croak "App::Options->init(): 'options' arg must be an array reference"
+                if (ref($init_args{options}) ne "ARRAY");
+            push(@vars, @{$init_args{options}});
+        }
 
-    if ($option) {
-        push(@vars, (sort keys %$option));
-    }
+        if ($option) {
+            push(@vars, (sort keys %$option));
+        }
 
-    foreach $var (@vars) {
-        if (!defined $values->{$var}) {
-            $value = $option ? $option->{$var}{default} : undef;
-            if (!$init_args{no_env_vars}) {
-                if ($option && defined $option->{$var}{env}) {
-                    if ($option->{$var}{env} eq "") {
-                        @env_vars = ();
+        print STDERR "6. Scanning for Environment Variables.\n" if ($debug_options);
+
+        foreach $var (@vars) {
+            if (!defined $values->{$var}) {
+                $value = undef;
+                if (!$init_args{no_env_vars}) {
+                    if ($option && defined $option->{$var}{env}) {
+                        if ($option->{$var}{env} eq "") {
+                            @env_vars = ();
+                        }
+                        else {
+                            @env_vars = split(/[,;]/, $option->{$var}{env});
+                        }
                     }
                     else {
-                        @env_vars = split(/[,;]/, $option->{$var}{env});
+                        @env_vars = ( "APP_" . uc($var) );
+                    }
+                    foreach $env_var (@env_vars) {
+                        if ($env_var && defined $ENV{$env_var}) {
+                            $value = $ENV{$env_var};
+                            print STDERR "   Env Var Found : [$var] = [$value] from [$env_var] of [@env_vars].\n"
+                                if ($debug_options >= 4);
+                            last;
+                        }
                     }
                 }
-                else {
-                    @env_vars = ( "APP_" . uc($var) );
-                }
-                foreach $env_var (@env_vars) {
-                    if ($env_var && defined $ENV{$env_var}) {
-                        $value = $ENV{$env_var};
-                        last;
+                # do variable substitutions, var = ${prefix}/bin, var = $ENV{PATH}
+                if (defined $value) {
+                    if ($value =~ /\{.*\}/) {
+                        $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                        $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
+                        print STDERR "   Env Var Underwent Substitutions : [$var] = [$value]\n"
+                            if ($debug_options >= 4);
                     }
+                    else {
+                        print STDERR "   Env Var : [$var] = [$value]\n"
+                            if ($debug_options >= 3);
+                    }
+                    $values->{$var} = $value;    # save all in %App::options
                 }
             }
-            # do variable substitutions, var = ${prefix}/bin
-            if (defined $value) {
-                $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
-            }
-            $values->{$var} = $value;    # save all in %App::options
         }
+
+        foreach $env_var (keys %ENV) {
+            next if ($env_var !~ /^APP_/);
+            $var = lc($env_var);
+            $var =~ s/^app_//;
+            if (! defined $values->{$var}) {
+                $values->{$var} = $ENV{$env_var};
+                print STDERR "   Env Var [$var] = [$value] from [$env_var] (assumed).\n"
+                    if ($debug_options >= 3);
+            }
+        }
+        $debug_options = $values->{debug_options} || 0;
+    }
+    else {
+        print STDERR "6. Skipped Environment Variable Processing\n" if ($debug_options);
     }
 
     #################################################################
-    # 7. establish the definitive (not inferred) $prefix
+    # 7. set defaults
+    #################################################################
+    if ($option) {
+        @vars = (sort keys %$option);
+
+        print STDERR "7. Set Defaults.\n" if ($debug_options);
+
+        foreach $var (@vars) {
+            if (!defined $values->{$var}) {
+                $value = $option->{$var}{default};
+                # do variable substitutions, var = ${prefix}/bin, var = $ENV{PATH}
+                if (defined $value) {
+                    if ($value =~ /\{.*\}/) {
+                        $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                        $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
+                        print STDERR "   Default Underwent Substitutions : [$var] = [$value]\n"
+                            if ($debug_options >= 4);
+                    }
+                    $values->{$var} = $value;    # save all in %App::options
+                    print STDERR "   Default Var [$var] = [$value]\n" if ($debug_options >= 3);
+                }
+            }
+        }
+    }
+    else {
+        print STDERR "7. Skipped Defaults (no option defaults defined)\n" if ($debug_options);
+    }
+
+    #################################################################
+    # 8. establish the definitive (not inferred) $prefix
     #################################################################
     if ($values->{prefix}) {
-        $prefix = $values->{prefix};
+        if ($prefix eq $values->{prefix}) {
+            print STDERR "8. Definitive prefix found [$prefix] (no change)\n" if ($debug_options);
+        }
+        else {
+            print STDERR "8. Definitive prefix found [$prefix] => [$values->{prefix}]\n" if ($debug_options);
+            $prefix = $values->{prefix};
+        }
     }
     else {
         $values->{prefix} = $prefix;
+        print STDERR "8. prefix Made Definitive [$prefix]\n" if ($debug_options);
     }
 
     #################################################################
-    # 8. add "perlinc" directories to @INC, OR
+    # 9. add "perlinc" directories to @INC, OR
     #    automatically include (if not already) the directories
     #    $PREFIX/lib/$^V and $PREFIX/lib/site_perl/$^V
     #    i.e. /usr/mycompany/lib/5.6.1 and /usr/mycompany/lib/site_perl/5.6.1
     #################################################################
 
     if (defined $values->{perlinc}) {    # add perlinc entries
-        unshift(@INC, split(/[,; ]+/,$values->{perlinc}));
+        if ($values->{perlinc}) {
+            unshift(@INC, split(/[,; ]+/,$values->{perlinc}));
+            if ($debug_options) {
+                print STDERR "9. perlinc Directories Added to \@INC\n   ",
+                    join("\n   ", @INC), "\n";
+            }
+        }
+        else {
+            print STDERR "9. No Directories Added to \@INC\n" if ($debug_options);
+        }
     }
     else {
         my $libdir = "$prefix/lib";
@@ -649,25 +820,30 @@ sub init {
                 unshift(@INC, "$libdir/perl5/$perlversion");
             }
         }
+        if ($debug_options) {
+            print STDERR "9. Standard Directories Added to \@INC\n   ",
+                join("\n   ", @INC), "\n";
+        }
     }
 
     #################################################################
-    # 9. print stuff out for options debugging
+    # 10. print stuff out for options debugging
     #################################################################
 
-    if ($values->{debug_options}) {
-        print STDERR "%App::options (or other) =\n";
+    if ($debug_options >= 2) {
+        print STDERR "FINAL VALUES: \%App::options (or other) =\n";
         foreach $var (sort keys %$values) {
-            print STDERR "   $var = [$values->{$var}]\n";
-        }
-        print STDERR "\@INC =\n";
-        foreach $var (@INC) {
-            print STDERR "   $var\n";
+            if (defined $values->{$var}) {
+                print STDERR "   $var = [$values->{$var}]\n";
+            }
+            else {
+                print STDERR "   $var = [undef]\n";
+            }
         }
     }
 
     #################################################################
-    # 10. perform validations, print help, and exit
+    # 11. perform validations, print help, and exit
     #################################################################
 
     my $exit_status = -1;
@@ -772,7 +948,15 @@ sub print_usage {
     $values = {} if (!$values);
     $init_args = {} if (!$init_args);
 
-    print STDERR "Usage: $0 [options]\n";
+    my ($args_description);
+    if (defined $init_args->{args_description}) {
+        $args_description = " " . $init_args->{args_description};
+    }
+    else {
+        $args_description = " [args]";
+    }
+
+    print STDERR "Usage: $0 [options]$args_description\n";
     printf STDERR "       --%-32s print this message (also -?)\n", "help";
     my (@vars, $show_all, %option_seen);
     $show_all = $init_args->{show_all};
@@ -788,7 +972,7 @@ sub print_usage {
         push(@vars, (sort keys %$values));
     }
     my ($var, $value, $type, $desc, $option);
-    my ($var_str, $value_str, $type_str, $desc_str);
+    my ($var_str, $value_str, $type_str, $desc_str, $val_desc);
     $option = $init_args->{option} || {};
     foreach $var (@vars) {
         next if ($option_seen{$var});
@@ -797,7 +981,8 @@ sub print_usage {
         $value = $values->{$var};
         $type  = $option->{$var}{type} || "";
         $desc  = $option->{$var}{description} || "";
-        $var_str   = ($type eq "boolean") ? $var : ($type ? "$var=<$type>" : "$var=<$var>");
+        $val_desc  = $option->{$var}{value_description} || "";
+        $var_str   = ($type eq "boolean") ? $var : ($val_desc ? "$var=<$val_desc>" : "$var=<value>");
         $value_str = (defined $value) ? $value : "undef";
         $type_str  = ($type) ? " ($type)" : "";
         $desc_str  = ($desc) ? " $desc"   : "";
@@ -864,8 +1049,10 @@ This line will be expanded properly.
 (Of course, the variable and its value should be already set in the
 option hash.)
 
-Environment variables are not searched for the command line options
-because the command line options would override them anyway.
+Variable substitution is also performed to interpolate values from
+the environment.
+
+    port = $ENV{HTTP_PORT}
 
 =head2 Special Option "app"
 
@@ -1321,9 +1508,10 @@ confronting this problem would put the following lines into
 
 If, however, your projects were not in the habit of using the
 PREFIX environment variable and the program is not installed in
-$PREFIX/bin, he would have to put the above lines in the same
-directory as "listcust" in either the "app.conf" file or the
-"listcust.conf" file.
+$PREFIX/bin, he would have to put the above lines
+in either the "app.conf" file or the "listcust.conf" file
+in either the global /etc/app directory or in the same
+directory as "listcust".
 
 A user (without privileges to the "$PREFIX/etc/app" directory
 or the directory in which "listcust" lives) would have to put
@@ -1509,6 +1697,25 @@ be a bit silly.
         no_option_file => 1,
         no_env_vars => 1,
     );
+
+=head2 A Deployment Scenario
+
+Sometimes a software system gets deployed across many machines.
+You may wish to have a single option file set different values
+when it is deployed to different machines.
+
+For this purpose, the automatic "host" and "hostname" values
+are useful.  Suppose you have four servers named "foo1", "foo2",
+"foo3", and "foo4".  You may wish the software to use different
+databases on each server.  So app.conf might look like this.
+
+    [host=foo1] dbname = devel
+    [host=foo2]
+    dbname = test
+    [host=foo3]
+    dbname = prod
+    [ALL]
+    dbname = prod
 
 Hopefully, that's enough to get you going.
 

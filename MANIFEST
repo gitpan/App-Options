@@ -4,9 +4,6 @@ Makefile.PL
 README
 TODO
 bin/prefix
-examples/app.conf
-examples/test1
-examples/test1.conf
 lib/App/Options.pm
 t/app.conf
 t/main.t
@@ -17,3 +14,7 @@ t/test2
 t/test3
 t/test4
 t/test5
+benchmark/run
+examples/app.conf
+examples/test1
+examples/test1.conf

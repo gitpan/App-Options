@@ -1,33 +1,26 @@
 ######################################################################
-## File: $Id: TODO,v 1.7 2004/09/02 21:09:00 spadkins Exp $
+## File: $Id: TODO,v 1.8 2004/12/28 22:28:52 spadkins Exp $
 ######################################################################
 
 These items are what will be required to go to version 1.00.
  o use File::Spec to make file/directory manipulation platform-independent
 
 These are other interesting things which I might do
- o add option that documents the args (not just the options) of a command
+ o file/cmd variables, var = <FILE>filename (or "cmd|")
  o here documents, var = <<EOF
- o file variables, var = <FILE>filename (or "cmd|")
- o add a standard ${host} variable
  o line continuation chars, i.e. var = hello \\nworld
- o auto-import of environment vars named "APP_*"
- o multiple levels of "show_all"
- o make lots more tests (starting with the examples in the documentation)
- o substitute environment vars with "$ENV{PATH}"
  o setenv arg to set environment variables
+ o make lots more tests (starting with the examples in the documentation)
  o make example scripts (starting with the examples in the documentation)
  o add --version support (print out own version and versions of all modules)
- o add "arg" option attribute for the name of the option argument
- o add "args_description" arg to describe what's left on cmd line after options removed
- o improve debug_options (env vars, etc.)
  o enforce other option parsing rules (single letter + arg, single/double dash)
  o option aliases/synonyms/alternates (i.e. -s = --silent)
- o "secure" attribute
+ o "secure" attribute (to ensure that passwords are only stored in files not
+   readable by "world", and never in %ENV)
  o "strict" option:
        0 = no strictness
        1 = unknown options cause error (file can define options),
-       2 = [1] + unknown options cause error (program only can define options)
+       2 = [1] + unknown cmdline options cause error (program only can define options)
        3 = [1+2] + silently don't include options from file not defined by program
        4 = [1+2+3] + options from file not defined by program cause errors
  o write "prefix.pod"
