@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.11 2005/01/07 13:04:38 spadkins Exp $
+## $Id: Options.pm,v 1.14 2005/01/30 23:07:43 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "0.93";
+$VERSION = "0.94";
 
 =head1 NAME
 
@@ -47,8 +47,8 @@ App::Options - combine command line options, environment vars, and option file v
     $HOME/.app/app.conf
     $PROGDIR/prog.conf
     $PROGDIR/app.conf
-    $PREFIX/prog.conf
-    $PREFIX/app.conf
+    $PREFIX/etc/app/prog.conf
+    $PREFIX/etc/app/app.conf
     /etc/app/app.conf
 
   with a file format like
@@ -85,7 +85,7 @@ multiple versions of an application on the same system (i.e.
 /usr/myproduct/version).
 
 The description of the AppConfig distribution sounds similar
-to is described here.  However, the following are the key
+to what is described here.  However, the following are some key
 differences.
 
  * App::Options does its option processing in the BEGIN block.
@@ -101,8 +101,8 @@ differences.
  * App::Options consults a cascading set of option files.
    These files include those which are system global, project
    global, and user private.  This allows for system
-   administrators, project developers, and in individual
-   users to all have complementary roles on defining
+   administrators, project developers, and individual
+   users to all have complementary roles in defining
    the configuration values.
 
  * App::Options is not a toolkit but a standardized way of
@@ -111,7 +111,7 @@ differences.
    code the "--help" feature.  With App::Options, you simply
    "use App::Options;" and all the hard work is done.
    Advanced options can be added later as necessary as args
-   to the "use" statement.
+   to the "use App::Options;" statement.
 
 App::Options is also the easiest command-line processing system
 that I have found anywhere. It then provides a smooth transition to
@@ -119,8 +119,7 @@ more advanced features only as they are needed.  Every single
 quick and dirty script I ever write from now on can afford
 to use App::Options.
 
-The documentation of App::Options takes three
-forms below.
+The documentation of App::Options takes three forms below.
 
   API Reference - describing the API (methods, args)
   Logic Flow - describing the order and logic of processing
@@ -396,6 +395,8 @@ sub init {
     # Put the var/value pairs in %$values
     #################################################################
     my $debug_options = $values->{debug_options} || 0;
+    my $show_help = 0;
+    my $show_version = 0;
     if (! $init_args{no_cmd_args}) {
         while ($#ARGV >= 0 && $ARGV[0] =~ /^--?([^=-][^=]*)(=?)(.*)/) {
             $var = $1;
@@ -405,6 +406,18 @@ sub init {
         }
         if ($#ARGV >= 0 && $ARGV[0] eq "--") {
             shift @ARGV;
+        }
+        if ($values->{help}) {
+            $show_help = 1;
+            delete $values->{help};
+        }
+        elsif ($values->{"?"}) {
+            $show_help = 1;
+            delete $values->{"?"};
+        }
+        elsif ($values->{version}) {
+            $show_version = $values->{version};
+            delete $values->{version};
         }
         $debug_options = $values->{debug_options} || 0;
         print STDERR "1. Parsed Command Line Options. [@options]\n" if ($debug_options);
@@ -420,9 +433,9 @@ sub init {
     #################################################################
     my $is_unix = 1;  # pretend we are not on Unix (use File::Spec)
 
-    my $prog_cat = "";                   # start with no catalog
-    my $prog_dir = $0;                   # start with the full script path
+    my ($prog_cat, $prog_dir, $prog_file);
     if ($is_unix) {
+        $prog_dir = $0;
         # i.e. /usr/local/bin/app, /app
         if ($prog_dir =~ m!^/!) {            # absolute path
             # i.e. /usr/local/bin/app, /app
@@ -433,13 +446,15 @@ sub init {
             $prog_dir =~ s!/?[^/]+$!!;       # trim off the program name
             $prog_dir = "." if (!$prog_dir); # if nothing left, directory is current dir
         }
+        $prog_file = $0;
+        $prog_file =~ s!.*/!!;
+        $prog_cat = "";
     }
     else {
         # i.e. C:\perl\bin\app, \app
-        my ($file);
-        ($prog_cat, $prog_dir, $file) = File::Spec->splitpath($prog_dir);
+        ($prog_cat, $prog_dir, $prog_file) = File::Spec->splitpath($0);
     }
-    print STDERR "2. Found Directory of Program. catalog=[$prog_cat] dir=[$prog_dir]\n"
+    print STDERR "2. Found Directory of Program. catalog=[$prog_cat] dir=[$prog_dir] file=[$prog_file]\n"
         if ($debug_options);
 
     #################################################################
@@ -505,8 +520,7 @@ sub init {
             }
         }
         if (!$app) {
-            $app = $0;            # start with the full script path
-            $app =~ s!.*/!!;      # strip off leading path
+            $app = $prog_file;    # start with the full program name
             $app =~ s/\.[^.]+$//; # strip off trailing file type (i.e. ".pl")
             $app_origin = "program name ($0)";
         }
@@ -672,7 +686,7 @@ sub init {
     }
 
     #################################################################
-    # 6. fill in ENV vars and defaults
+    # 6. fill in ENV vars
     #################################################################
 
     if (!$init_args{no_env_vars}) {
@@ -747,12 +761,30 @@ sub init {
     }
 
     #################################################################
-    # 7. set defaults
+    # 7. establish the definitive (not inferred) $prefix
+    #################################################################
+    if ($values->{prefix}) {
+        if ($prefix eq $values->{prefix}) {
+            print STDERR "7. Definitive prefix found [$prefix] (no change)\n" if ($debug_options);
+        }
+        else {
+            print STDERR "7. Definitive prefix found [$prefix] => [$values->{prefix}]\n" if ($debug_options);
+            $prefix = $values->{prefix};
+        }
+    }
+    else {
+        $values->{prefix} = $prefix;
+        print STDERR "7. prefix Made Definitive [$prefix]\n" if ($debug_options);
+    }
+
+    #################################################################
+    # 8. set defaults
     #################################################################
     if ($option) {
-        @vars = (sort keys %$option);
+        @vars = (defined $init_args{options}) ? @{$init_args{options}} : ();
+        push(@vars, (sort keys %$option));
 
-        print STDERR "7. Set Defaults.\n" if ($debug_options);
+        print STDERR "8. Set Defaults.\n" if ($debug_options);
 
         foreach $var (@vars) {
             if (!defined $values->{$var}) {
@@ -772,24 +804,7 @@ sub init {
         }
     }
     else {
-        print STDERR "7. Skipped Defaults (no option defaults defined)\n" if ($debug_options);
-    }
-
-    #################################################################
-    # 8. establish the definitive (not inferred) $prefix
-    #################################################################
-    if ($values->{prefix}) {
-        if ($prefix eq $values->{prefix}) {
-            print STDERR "8. Definitive prefix found [$prefix] (no change)\n" if ($debug_options);
-        }
-        else {
-            print STDERR "8. Definitive prefix found [$prefix] => [$values->{prefix}]\n" if ($debug_options);
-            $prefix = $values->{prefix};
-        }
-    }
-    else {
-        $values->{prefix} = $prefix;
-        print STDERR "8. prefix Made Definitive [$prefix]\n" if ($debug_options);
+        print STDERR "8. Skipped Defaults (no option defaults defined)\n" if ($debug_options);
     }
 
     #################################################################
@@ -814,15 +829,40 @@ sub init {
     else {
         my $libdir = "$prefix/lib";
         my $libdir_found = 0;
+        # Look to see whether this PREFIX has been included already in @INC.
+        # If it has, we do *not* want to automagically guess which directories
+        # should be searched and in which order.
         foreach my $incdir (@INC) {
             if ($incdir =~ /^$libdir/) {
                 $libdir_found = 1;
+                last;
             }
         }
+
+        # The traditional way to install software from CPAN uses
+        # ExtUtils::MakeMaker via Makefile.PL with the "make install"
+        # command.  If you are installing this software to non-standard
+        # places, you would use the "perl Makefile.PL PREFIX=$PREFIX"
+        # command.  This would typically put modules into the
+        # $PREFIX/lib/perl5/site_perl/$perlversion directory.
+
+        # However, a newer way to install software (and recent versions
+        # of CPAN.pm understand this) uses Module::Build via Build.PL
+        # with the "Build install" command.  If you are installing this
+        # software to non-standard places, you would use the 
+        # "perl Build.PL install_base=$PREFIX" command.  This would
+        # typically put modules into the $PREFIX/lib directory.
+
+        # So if we need to guess about extra directories to add to the
+        # @INC variable ($PREFIX/lib is nowhere currently represented
+        # in @INC), we should add directories which work for software
+        # installed with either Module::Build or ExtUtils::MakeMaker.
+
         if (!$libdir_found) {
             unshift(@INC, "$libdir");
             if ($^V) {
                 my $perlversion = sprintf("%vd", $^V);
+                unshift(@INC, $libdir);
                 unshift(@INC, "$libdir/perl5/site_perl/$perlversion");  # site_perl goes first!
                 unshift(@INC, "$libdir/perl5/$perlversion");
             }
@@ -850,11 +890,20 @@ sub init {
     }
 
     #################################################################
-    # 11. perform validations, print help, and exit
+    # 11. print version information (--version)
+    #################################################################
+
+    if ($show_version) {
+        &print_version($prog_file, $show_version, $values);
+        exit(0);
+    }
+
+    #################################################################
+    # 12. perform validations, print help, and exit
     #################################################################
 
     my $exit_status = -1;
-    if ($values->{"?"} || $values->{help}) {
+    if ($show_help) {
         $exit_status = 0;
     }
 
@@ -907,13 +956,13 @@ sub init {
             elsif ($type eq "datetime") {
                 if ($value !~ /^[0-9]{4}-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]$/) {
                     $exit_status = 1;
-                    print "Error: \"$var\" must be of type \"$type\" (format \"YYYY-MM-DD HH:MM::SS\") (not \"$value\")\n";
+                    print "Error: \"$var\" must be of type \"$type\" (format \"YYYY-MM-DD HH:MM:SS\") (not \"$value\")\n";
                 }
             }
             elsif ($type eq "time") {
                 if ($value !~ /^[0-2][0-9]:[0-5][0-9]:[0-5][0-9]$/) {
                     $exit_status = 1;
-                    print "Error: \"$var\" must be of type \"$type\" (format \"HH:MM::SS\") (not \"$value\")\n";
+                    print "Error: \"$var\" must be of type \"$type\" (format \"HH:MM:SS\") (not \"$value\")\n";
                 }
             }
             elsif ($type =~ m!^/(.*)/$!) {
@@ -994,6 +1043,80 @@ sub print_usage {
         $type_str  = ($type) ? " ($type)" : "";
         $desc_str  = ($desc) ? " $desc"   : "";
         printf STDERR "       --%-32s [%s]$type_str$desc_str\n", $var_str, $value_str;
+    }
+}
+
+sub print_version {
+    my ($prog_file, $show_version, $values) = @_;
+    print "Program: $prog_file\n";
+    print "(use --version_packages to see version info for specific perl packages)\n";
+    my ($module, $package, $version, $full_path);
+    if ($values->{version_packages}) {
+        foreach my $package (split(/[ ;,]+/,$values->{version_packages})) {
+            $module = "$package.pm";
+            $module =~ s!::!/!g;
+            if ($package =~ /^[A-Z][A-Za-z0-9:_]*$/) {
+                eval {
+                    require $module;
+                };
+                if ($@) {
+                    my $error = $@;
+                    $error =~ s/ *\(\@INC contains:.*//s;
+                    print "WARNING: $package: $error\n";
+                }
+            }
+        }
+    }
+    print "Version Package\n";
+    print "------- ----------------------------\n";
+    printf("%7s main\n", $main::VERSION || "undef");
+
+    my ($show_module, @package_pattern, $version_sys_packages);
+
+    # There are lots of modules which get loaded up which have
+    # nothing to do with your program and which you would ordinarily
+    # not want to see.  So ...
+    #    --version=1  will show only the packages you specify
+    #    --version=2  will show all packages
+    if ($values->{version_packages}) {
+        $version_sys_packages = $values->{version_sys_packages};
+        $version_sys_packages = "App::Options,Carp,Sys::Hostname,Cwd,File::Spec,Config"
+            if (!defined $version_sys_packages);
+        @package_pattern = split(/[ ;,]+/,$version_sys_packages);
+        if ($values->{version_packages}) {
+            push(@package_pattern, split(/[ ;,]+/,$values->{version_packages}));
+        }
+    }
+
+    # I should look into doing this from the symbol table rather
+    # than %INC which reflects the *modules*, not the packages.
+    # For most purposes, this will be good enough.
+    foreach $module (sort keys %INC) {
+        $full_path = $INC{$module};
+        $package = $module;
+        $package =~ s/\.p[lm]$//;
+        $package =~ s!/!::!g;
+
+        if ($values->{version_packages} && $show_version ne "all") {
+            $show_module = 0;
+            foreach my $package_pattern (@package_pattern) {
+                if ($package =~ /$package_pattern/) {
+                    $show_module = 1;
+                    last;
+                }
+            }
+        }
+        else {
+            $show_module = 1;
+        }
+
+        if ($show_module) {
+            $version = "";
+            eval "\$version = \$${package}::VERSION;";
+            $version = "undef" if (!$version);
+            printf("%7s %-20s\n", $version, $package);
+            #printf("%7s %-20s %s\n", "", $module, $full_path);
+        }
     }
 }
 
@@ -1359,11 +1482,61 @@ out, the resulting list of variable values is printed out,
 and the resulting list of include directories (@INC) is printed
 out.
 
-=head2 Help and Validations
+=head2 Version
 
 After all values have been parsed, various conditions are
-checked to see if the program should not continue and the
-usage statement be printed out.
+checked to see if the program should print diagnostic information
+rather than continue running.  Two of these examples are --version
+and --help.
+
+If the "--version" option is set on the command line,
+the version information for all loaded modules is printed,
+and the program is exited.  (The version of a package/module is
+assumed to be the value of the $VERSION variable in that package.
+i.e. The version of the XYZ::Foo package is $XYZ::Foo::VERSION.)
+
+ prog --version
+
+Of course, this is all done implicitly in the BEGIN block (during
+"use App::Options;").  If your program tried to set
+$main::VERSION, it may not be set unless it is set explicitly
+in the BEGIN block.
+
+ #!/usr/bin/perl
+ BEGIN {
+   $VERSION = "1.12";
+ }
+ use App::Options;
+
+This can be integrated with CVS file versioning using something 
+like the following.
+
+ #!/usr/bin/perl
+ BEGIN {
+   $VERSION = do { my @r=(q$Revision: 1.14 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+ }
+ use App::Options;
+
+Furthermore, the version information about some modules that you
+might expect to have seen will not be printed because those modules
+have not yet been loaded.  To fix this, use the --version_packages
+option (or set it in an option file).  This option contains a
+comma-separated list of modules and/or module regular expressions.
+The modules are loaded, and the version information from all
+resulting packages that match any of the patterns is printed.
+
+ prog --version --version_packages=CGI
+ prog --version --version_packages=CGI,Template
+
+This also cuts down on the miscellaneous
+modules (and pragmas) which might have cluttered up your view
+of the version information you were interested in.
+If you really wish to see version information for all
+modules, use the --version=all option.
+
+ prog --version=all --version_packages=CGI,Template
+
+=head2 Help and Validations
 
 If the "-?" or "--help" options were set on the command line,
 the usage statement is printed, and the program is exited.
@@ -1422,6 +1595,9 @@ Run it different kinds of ways to see how it responds.
     demo1 -?
     demo1 --debug_options -?
     demo1 -x=5 --verbose=10 --foo=bar --debug_options -?
+
+    demo1 --version
+    demo1 --version --version_packages=CGI
 
 Now create a copy of the program.
 
@@ -1517,8 +1693,8 @@ If, however, your projects were not in the habit of using the
 PREFIX environment variable and the program is not installed in
 $PREFIX/bin, he would have to put the above lines
 in either the "app.conf" file or the "listcust.conf" file
-in either the global /etc/app directory or in the same
-directory as "listcust".
+in the same directory as "listcust" or in the global
+"/etc/app/app.conf" option file.
 
 A user (without privileges to the "$PREFIX/etc/app" directory
 or the directory in which "listcust" lives) would have to put
@@ -1672,7 +1848,6 @@ have been used.
             "first_name", "last_name", "birth_dt", "company_id",
             "wholesale_ind", "change_dttm",
         ],
-        show_all => 1,
     );
 
 Using the "options" arg causes the options to

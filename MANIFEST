@@ -1,6 +1,8 @@
+Build.PL
 CHANGES
 MANIFEST
 Makefile.PL
+META.yml
 README
 TODO
 bin/prefix

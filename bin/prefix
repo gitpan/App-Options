@@ -2,10 +2,10 @@
 #*********************************************************************
 #** prefix
 #*********************************************************************
-#** @(#)$Id: prefix,v 1.1 2003/11/16 21:21:22 spadkins Exp $
+#** @(#)$Id: prefix,v 1.2 2005/01/30 23:06:04 spadkins Exp $
 #*********************************************************************
 
-export OLDPREFIX=$PREFIX
+export OLD_PREFIX=$PREFIX
 export PREFIX=${PREFIX:-/usr/local}
 
 if [[ -f "$HOME/.prefixes" ]]      # check if multiple environments exist
@@ -17,25 +17,36 @@ fi
 
 print_usage ()
 {
+   echo
    echo "The prefix script allows you to manage multiple installations of"
    echo "a set of software installed on the same machine.  It helps in this"
    echo "by taking care of the reconfiguration of environment variables"
    echo "appropriate for each installation.  It is assumed that the"
-   echo "software for each installation all under a single directory"
-   echo "called PREFIX.  This is especially important on development"
-   echo "machines where multiple versions of software are installed side-"
-   echo "by-side (i.e. development, test, production)."
+   echo "software for each installation is all under a single directory"
+   echo "whose name is assigned to an environment variable called PREFIX. "
+   echo
+   echo "This arrangement of enabling multiple installations of software"
+   echo "on a single machine is useful at many times.  On a single server,"
+   echo "it can provide for development, test, and production installations"
+   echo "of software.  Alternatively, on development servers,"
+   echo "it allows for multiple development \"sandboxes\", one for each"
+   echo "developer.  On production servers, it allows for multiple versions"
+   echo "of the production software to be installed.  One might be the currently"
+   echo "running software, one the previous software kept online as a fall-back,"
+   echo "and one a new release of software which is scheduled to be brought"
+   echo "online soon."
    echo
    echo "There are three usages of the prefix script:"
    echo
-   echo "  (1) The interactive usage should be placed as the LAST LINE"
+   echo "  (1) The interactive usage should be placed as the last line"
    echo "      of a user's ".profile".  The user must be running the"
    echo "      Korn shell (ksh) or the Bourne Again shell (bash)."
-   echo "      The user is prompted to enter one of the known echo PREFIX locations."
+   echo "      The user is prompted to enter one of the known PREFIX locations,"
+   echo "      specified in the \$HOME/.prefixes file or the /etc/prefixes file."
    echo "      During configuration, the \$PREFIX/.prefixrc file is sourced"
    echo "      in order to accomplish environment-specific configurations."
    echo "  (2) The non-interactive user configuration does not consult"
-   echo "      $HOME/.prefixes or /etc/prefixes or prompt the user, but merely"
+   echo "      \$HOME/.prefixes or /etc/prefixes or prompt the user, but merely"
    echo "      configures the environment in accordance with the cmd line argument."
    echo "  (3) The batch command usage is mainly for running commands from"
    echo "      cron or running commands in another environment without changing"
@@ -43,7 +54,7 @@ print_usage ()
    echo
    echo "Usage (1): . prefix                     (sets up environment)"
    echo "      (2): . prefix <prefix>            (non-interactive setup)"
-   echo "      (3): prefix <prefix> <cmd> <args> (Runs cmd configured for PREFIX)"
+   echo "      (3): prefix <prefix> <cmd> <args> (runs cmd configured for PREFIX)"
    echo
 }
 
@@ -119,11 +130,11 @@ else
       export SED_CLEAN_LIBPATH=""
       export SED_CLEAN_MANPATH=""
 
-      for AUXDIR in $(echo "$OLDPREFIX:$PRE_PREFIX:$POST_PREFIX" | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
+      for AUX_DIR in $(echo "$OLD_PREFIX:$PRE_PREFIX:$POST_PREFIX" | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
       do
-         SED_CLEAN_PATH="$SED_CLEAN_PATH -e s!:$AUXDIR/bin!!g"
-         SED_CLEAN_LIBPATH="$SED_CLEAN_LIBPATH -e s!:$AUXDIR/lib!!g"
-         SED_CLEAN_MANPATH="$SED_CLEAN_MANPATH -e s!:$AUXDIR/man!!g"
+         SED_CLEAN_PATH="$SED_CLEAN_PATH -e s!:$AUX_DIR/bin!!g"
+         SED_CLEAN_LIBPATH="$SED_CLEAN_LIBPATH -e s!:$AUX_DIR/lib!!g"
+         SED_CLEAN_MANPATH="$SED_CLEAN_MANPATH -e s!:$AUX_DIR/man!!g"
       done
 
       # Remove old references from the PATH
@@ -171,11 +182,11 @@ else
       ######################################################
       # source the environment's .rmsrc file if it exists
       ######################################################
-      for AUXDIR in $(echo $POST_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
+      for AUX_DIR in $(echo $POST_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
       do
-         if [[ -f $AUXDIR/.prefixrc ]]
+         if [[ -f $AUX_DIR/.prefixrc ]]
          then
-            . $AUXDIR/.prefixrc
+            . $AUX_DIR/.prefixrc
          fi
       done
 
@@ -184,11 +195,11 @@ else
          . $PREFIX/.prefixrc
       fi
 
-      for AUXDIR in $(echo $PRE_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
+      for AUX_DIR in $(echo $PRE_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
       do
-         if [[ -f $AUXDIR/.prefixrc ]]
+         if [[ -f $AUX_DIR/.prefixrc ]]
          then
-            . $AUXDIR/.prefixrc
+            . $AUX_DIR/.prefixrc
          fi
       done
 
@@ -204,58 +215,69 @@ else
       # Set appropriate defaults for common variables
       ##########################################################
 
-      export AUXPATH=""
-      export AUXLIBPATH=""
-      export AUXMANPATH=""
-      export SP_INCLUDEPATH=""
-      for AUXDIR in $(echo $PRE_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
+      export AUX_PATH=""
+      export AUX_LIBPATH=""
+      export AUX_MANPATH=""
+      export PREFIX_INCLUDES=""
+      for AUX_DIR in $(echo $PRE_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
       do
-         AUXPATH="$AUXPATH$AUXDIR/bin:"
-         AUXLIBPATH="$AUXLIBPATH$AUXDIR/lib:"
-         AUXMANPATH="$AUXMANPATH$AUXDIR/man:"
-         SP_INCLUDEPATH="$SP_INCLUDEPATH -I$AUXDIR/include"
+         AUX_PATH="$AUX_PATH$AUX_DIR/bin:"
+         AUX_LIBPATH="$AUX_LIBPATH$AUX_DIR/lib:"
+         AUX_MANPATH="$AUX_MANPATH$AUX_DIR/man:"
+         PREFIX_INCLUDES="$PREFIX_INCLUDES -I$AUX_DIR/include"
       done
 
-      SP_INCLUDEPATH="$SP_INCLUDEPATH -I$PREFIX/include"
+      PREFIX_INCLUDES="$PREFIX_INCLUDES -I$PREFIX/include"
 
-      export AUXPATHPOST=""
-      export AUXLIBPATHPOST=""
-      export AUXMANPATHPOST=""
-      for AUXDIR in $(echo $POST_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
+      export AUX_PATHPOST=""
+      export AUX_LIBPATHPOST=""
+      export AUX_MANPATHPOST=""
+      for AUX_DIR in $(echo $POST_PREFIX | sed -e 's/^/:/' -e 's!:\([^/~]\)!:'$PREFIX'/\1!' -e 's/:/ /g')
       do
-         AUXPATHPOST="$AUXPATHPOST:$AUXDIR/bin"
-         AUXLIBPATHPOST="$AUXLIBPATHPOST:$AUXDIR/lib"
-         AUXMANPATHPOST="$AUXMANPATHPOST:$AUXDIR/man"
-         SP_INCLUDEPATH="$SP_INCLUDEPATH -I$AUXDIR/include"
+         AUX_PATHPOST="$AUX_PATHPOST:$AUX_DIR/bin"
+         AUX_LIBPATHPOST="$AUX_LIBPATHPOST:$AUX_DIR/lib"
+         AUX_MANPATHPOST="$AUX_MANPATHPOST:$AUX_DIR/man"
+         PREFIX_INCLUDES="$PREFIX_INCLUDES -I$AUX_DIR/include"
       done
 
       # Add new references into the PATH
-      export PATH=$AUXPATH$PREFIX/bin$AUXPATHPOST:$PATH
+      export PATH=$AUX_PATH$PREFIX/bin$AUX_PATHPOST:$PATH
 
       # Add new references into the LD_LIBRARY_PATH
       if [[ "$LD_LIBRARY_PATH" = "" ]]
       then
-         export LD_LIBRARY_PATH=$AUXLIBPATH$PREFIX/lib$AUXLIBPATHPOST
+         export LD_LIBRARY_PATH=$AUX_LIBPATH$PREFIX/lib$AUX_LIBPATHPOST
       else
-         export LD_LIBRARY_PATH=$AUXLIBPATH$PREFIX/lib$AUXLIBPATHPOST:$LD_LIBRARY_PATH
+         export LD_LIBRARY_PATH=$AUX_LIBPATH$PREFIX/lib$AUX_LIBPATHPOST:$LD_LIBRARY_PATH
       fi
 
       # Add new references into the LIBPATH
       if [[ "$LIBPATH" = "" ]]
       then
-         export LIBPATH=$AUXLIBPATH$PREFIX/lib$AUXLIBPATHPOST
+         export LIBPATH=$AUX_LIBPATH$PREFIX/lib$AUX_LIBPATHPOST
       else
-         export LIBPATH=$AUXLIBPATH$PREFIX/lib$AUXLIBPATHPOST:$LIBPATH
+         export LIBPATH=$AUX_LIBPATH$PREFIX/lib$AUX_LIBPATHPOST:$LIBPATH
       fi
 
       # Add new references into the MANPATH
       if [[ "$MANPATH" = "" ]]
       then
-         export MANPATH=$AUXMANPATH$PREFIX/man$AUXMANPATHPOST
+         # guess at the base MANPATH
+         MANPATH=$(ls -d /man /*/man /*/*/man 2> /dev/null | tr '\n' ':' | sed 's/:$//')
+      fi
+      # Add new references into the MANPATH
+      if [[ "$MANPATH" = "" ]]
+      then
+         export MANPATH=$AUX_MANPATH$PREFIX/man$AUX_MANPATHPOST
       else
-         export MANPATH=$AUXMANPATH$PREFIX/man$AUXMANPATHPOST:$MANPATH
+         export MANPATH=$AUX_MANPATH$PREFIX/man$AUX_MANPATHPOST:$MANPATH
       fi
 
+   fi
+
+   if [[ "$PREFIX_CMD" != "" ]]
+   then
+      exec $PREFIX_CMD
    fi
 fi
 
@@ -266,15 +288,16 @@ unset PREFIX_CMD
 unset PREFIX_ASK
 unset NUM_PREFIXES
 unset NEW_PREFIX
+unset OLD_PREFIX
 
 unset SED_CLEAN_PATH
 unset SED_CLEAN_LIBPATH
 unset SED_CLEAN_MANPATH
-unset AUXPATH
-unset AUXLIBPATH
-unset AUXMANPATH
-unset AUXDIR
-unset AUXPATHPOST
-unset AUXLIBPATHPOST
-unset AUXMANPATHPOST
+unset AUX_PATH
+unset AUX_LIBPATH
+unset AUX_MANPATH
+unset AUX_DIR
+unset AUX_PATHPOST
+unset AUX_LIBPATHPOST
+unset AUX_MANPATHPOST
 

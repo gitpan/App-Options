@@ -1,0 +1,19 @@
+--- #YAML:1.0
+name: App-Options
+version: 0.94
+author:
+  - stephen.adkins.com
+abstract: |-
+  combine command line options, environment vars, and option file values
+license: perl
+requires:
+  Carp: 0
+  Config: 0
+  Cwd: 0
+  File::Spec: 0
+  Sys::Hostname: 0
+provides:
+  App::Options:
+    file: lib/App/Options.pm
+    version: 0.94
+generated_by: Module::Build version 0.2608
