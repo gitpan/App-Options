@@ -2,6 +2,12 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.93
+ x prefix can now be set in $prog_dir/app.conf to find $prefix/etc/app/app.conf
+ x single-line sections in option files are no longer independent of the
+   section they are in.  Both the section-condition and the line-condition
+   must now be satisfied for a value to be set.
+
 VERSION 0.92
  x cleaned up some warnings which appeared under -w (concatenation of undef)
  x add system-supplied hostname and host options

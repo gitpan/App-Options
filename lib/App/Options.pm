@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.10 2004/12/28 22:32:44 spadkins Exp $
+## $Id: Options.pm,v 1.11 2005/01/07 13:04:38 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "0.91";
+$VERSION = "0.93";
 
 =head1 NAME
 
@@ -195,7 +195,7 @@ See the P5EE web sites for more information on the P5EE project.
 
     Or we could have used a more full-featured version ...
 
-    App::Options->init(
+    use App::Options (
         values => \%MyPackage::options,
         options => [ "option_file", "prefix", "app",
                      "perlinc", "debug_options", "import", ],
@@ -423,6 +423,7 @@ sub init {
     my $prog_cat = "";                   # start with no catalog
     my $prog_dir = $0;                   # start with the full script path
     if ($is_unix) {
+        # i.e. /usr/local/bin/app, /app
         if ($prog_dir =~ m!^/!) {            # absolute path
             # i.e. /usr/local/bin/app, /app
             $prog_dir =~ s!/[^/]+$!!;        # trim off the program name
@@ -434,7 +435,7 @@ sub init {
         }
     }
     else {
-        # i.e. /usr/local/bin/app, /app
+        # i.e. C:\perl\bin\app, \app
         my ($file);
         ($prog_cat, $prog_dir, $file) = File::Spec->splitpath($prog_dir);
     }
@@ -541,7 +542,14 @@ sub init {
         my ($cond, @cond, $exclude);
         while ($#option_file > -1) {
             $option_file = shift(@option_file);
-            $option_file =~ s!\$\{prefix\}!$prefix!;
+            if ($option_file =~ m!\$\{prefix\}!) {
+                if ($values->{prefix}) {
+                    $option_file =~ s!\$\{prefix\}!$values->{prefix}!;
+                }
+                else {
+                    $option_file =~ s!\$\{prefix\}!$prefix!;
+                }
+            }
             $exclude_section = 0;
             print STDERR "   Looking for Option File [$option_file]\n" if ($debug_options >= 2);
             if (open(App::Options::FILE, "< $option_file")) {
@@ -551,7 +559,7 @@ sub init {
                     print STDERR "   [$exclude_section] $_\n" if ($debug_options >= 5);
                     # for lines that are like "[regexp]" or even "[regexp] var = value"
                     # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
-                    if (s|^ *\[([^\[\]]*)\] *||) {
+                    if (s!^ *\[(.*)\] *!!) {
                         print STDERR "     Section : [$1]\n" if ($debug_options >= 6);
                         @cond = split(/;/,$1);   # separate the conditions that must be satisfied
                         $exclude = 0;            # assume the condition allows inclusion (! $exclude)
@@ -566,7 +574,7 @@ sub init {
                             }
                             if ($value =~ m!^/(.*)/$!) {  # variable's value must match the regexp
                                 $regexp = $1;
-                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") !~ /$regexp/);
+                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") !~ /$regexp/) ? 1 : 0;
                                 print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) regexp=[$regexp]\n"
                                     if ($debug_options >= 6);
                             }
@@ -576,7 +584,7 @@ sub init {
                                     if ($debug_options >= 6);
                             }
                             else {  # a variable's value must match exactly
-                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value);
+                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value) ? 1 : 0;
                                 print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) equals\n"
                                     if ($debug_options >= 6);
                             }
@@ -593,9 +601,8 @@ sub init {
                             next;
                         }
                     }
-                    else {
-                        next if ($exclude_section);
-                    }
+                    next if ($exclude_section);
+
                     s/#.*$//;        # delete comments
                     s/^ +//;         # delete leading spaces
                     s/ +$//;         # delete trailing spaces
