@@ -1,11 +1,14 @@
 ######################################################################
-## File: $Id: TODO,v 1.9 2005/01/30 23:04:59 spadkins Exp $
+## File: $Id: TODO,v 1.10 2005/05/14 14:14:01 spadkins Exp $
 ######################################################################
 
 These items are what will be required to go to version 1.00.
- o use File::Spec to make file/directory manipulation platform-independent
+ o [no more critical items]
 
 These are other interesting things which I might do
+ o clean up use of --version_modules (when to show all)
+ o incorporate LWP::UserAgent->get() as a standard way to get a conf
+ o VERSION option in program sets the $main::VERSION
  o investigate why $PREFIX/lib gets added to @INC twice
  o "strict" option:
        0 = no strictness
@@ -22,6 +25,7 @@ These are other interesting things which I might do
  o make lots more tests (starting with the examples in the documentation)
  o make example scripts (starting with the examples in the documentation)
  o enforce other option parsing rules (single letter + arg, single/double dash)
+ o consider ISO std datetimes: T instead of space, Z suffix, timezone suffix
  o option aliases/synonyms/alternates (i.e. -s = --silent)
  o "secure" attribute (to ensure that passwords are only stored in files not
    readable by "world", and never in %ENV)

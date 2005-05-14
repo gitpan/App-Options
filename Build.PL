@@ -30,7 +30,7 @@ foreach my $arg (@ARGV) {
 my $build = Module::Build->new (
     dist_name         => "App-Options",
     dist_version_from => "lib/App/Options.pm",
-    dist_author       => "stephen.adkins@officevision.com",
+    dist_author       => "stephen.adkins\@officevision.com",
     license           => "perl",
     requires => {
         "Carp"           => 0,  # use croak() instead of die()
@@ -38,6 +38,7 @@ my $build = Module::Build->new (
         "Cwd"            => 0,  # use abs_path() to turn relative to absolute directory
         "File::Spec"     => 0,  # make directory handling work cross-platform (i.e. MSWin)
         "Config"         => 0,  # find prefix directory for the installation of perl
+        "Module::Build"  => 0,  # needed for installing the software
     },
     @extra_args,
 );

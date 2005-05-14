@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.14 2005/01/30 23:07:43 spadkins Exp $
+## $Id: Options.pm,v 1.16 2005/05/14 14:14:01 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "0.95";
+$VERSION = "0.96";
 
 =head1 NAME
 
@@ -431,29 +431,12 @@ sub init {
     #    we will use this directory to search for the
     #    option file.
     #################################################################
-    my $is_unix = 1;  # pretend we are not on Unix (use File::Spec)
 
     my ($prog_cat, $prog_dir, $prog_file);
-    if ($is_unix) {
-        $prog_dir = $0;
-        # i.e. /usr/local/bin/app, /app
-        if ($prog_dir =~ m!^/!) {            # absolute path
-            # i.e. /usr/local/bin/app, /app
-            $prog_dir =~ s!/[^/]+$!!;        # trim off the program name
-        }
-        else {                               # relative path
-            # i.e. app, ./app, ../bin/app, bin/app
-            $prog_dir =~ s!/?[^/]+$!!;       # trim off the program name
-            $prog_dir = "." if (!$prog_dir); # if nothing left, directory is current dir
-        }
-        $prog_file = $0;
-        $prog_file =~ s!.*/!!;
-        $prog_cat = "";
-    }
-    else {
-        # i.e. C:\perl\bin\app, \app
-        ($prog_cat, $prog_dir, $prog_file) = File::Spec->splitpath($0);
-    }
+    # i.e. C:\perl\bin\app, \app
+    ($prog_cat, $prog_dir, $prog_file) = File::Spec->splitpath($0);
+    $prog_dir =~ s!\\!/!g;   # transform to POSIX-compliant (forward slashes)
+
     print STDERR "2. Found Directory of Program. catalog=[$prog_cat] dir=[$prog_dir] file=[$prog_file]\n"
         if ($debug_options);
 
@@ -488,6 +471,7 @@ sub init {
 
     if (!$prefix) {   # last resort: perl's prefix
         $prefix = $Config{prefix};
+        $prefix =~ s!\\!/!g;   # transform to POSIX-compliant
         $prefix_origin = "perl prefix";
     }
     print STDERR "3. Provisional prefix Set. prefix=[$prefix] origin=[$prefix_origin]\n"
@@ -565,9 +549,9 @@ sub init {
                 }
             }
             $exclude_section = 0;
-            print STDERR "   Looking for Option File [$option_file]\n" if ($debug_options >= 2);
+            print STDERR "   Looking for Option File [$option_file]" if ($debug_options);
             if (open(App::Options::FILE, "< $option_file")) {
-                print STDERR "   Found Option File [$option_file]\n" if ($debug_options >= 2);
+                print STDERR " : Found\n" if ($debug_options);
                 while (<App::Options::FILE>) {
                     chomp;
                     print STDERR "   [$exclude_section] $_\n" if ($debug_options >= 5);
@@ -677,6 +661,9 @@ sub init {
                     unshift(@option_file, split(/[,; ]+/, $values->{import}));
                     delete $values->{import};
                 }
+            }
+            else {
+                print STDERR "\n" if ($debug_options);
             }
         }
         $debug_options = $values->{debug_options} || 0;
@@ -833,7 +820,7 @@ sub init {
         # If it has, we do *not* want to automagically guess which directories
         # should be searched and in which order.
         foreach my $incdir (@INC) {
-            if ($incdir =~ /^$libdir/) {
+            if ($incdir =~ m!^$libdir!) {
                 $libdir_found = 1;
                 last;
             }
@@ -1513,7 +1500,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 1.14 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 1.16 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 

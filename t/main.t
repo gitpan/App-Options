@@ -10,6 +10,8 @@ BEGIN {
     delete $ENV{DOCUMENT_ROOT};
 }
 
+use Config;
+use File::Spec;
 use Test::More qw(no_plan);
 use lib "lib";
 use lib "../lib";
@@ -27,9 +29,12 @@ use App::Options (
     },
 );
 
+my $prefix = $Config{prefix};
+$prefix =~ s!\\!/!g;  # transform to POSIX-compliant
+
 #print "CONF:\n   ", join("\n   ",%App::options), "\n";
 ok(%App::options, "put something in %App::options");
-is($App::options{prefix}, "/usr/local", "prefix = /usr/local");
+is($App::options{prefix}, $prefix, "prefix = $prefix");
 is($App::options{app}, "main", "app = main");
 is($App::options{var}, "value", "var = value");
 is($App::options{var1}, "pattern match", "pattern match");
@@ -68,7 +73,7 @@ is($INC[0], "/usr/mycompany/2.1.7/lib/perl5", "\@INC affected by perlinc");
 App::Options->init(\%App::otherconf);
 #print "CONF:\n   ", join("\n   ",%App::otherconf), "\n";
 ok(%App::otherconf, "put something in %App::otherconf");
-is($App::otherconf{prefix}, "/usr/local", "prefix = /usr/local");
+is($App::otherconf{prefix}, $prefix, "prefix = $prefix");
 is($App::otherconf{app}, "main", "app = main");
 is($App::otherconf{var}, "value", "var = value");
 is($App::otherconf{var1}, "pattern match", "pattern match");
@@ -77,7 +82,7 @@ is($App::otherconf{var2}, "old pattern match", "old pattern match");
 App::Options->init(values => \%App::options3);
 #print "CONF:\n   ", join("\n   ",%App::options3), "\n";
 ok(%App::options3, "put something in %App::options3");
-is($App::options3{prefix}, "/usr/local", "prefix = /usr/local");
+is($App::options3{prefix}, $prefix, "prefix = $prefix");
 is($App::options3{app}, "main", "app = main");
 is($App::options3{var}, "value", "var = value");
 is($App::options3{var1}, "pattern match", "pattern match");

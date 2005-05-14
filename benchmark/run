@@ -20,9 +20,24 @@ sub baseline {
     App::Options->init(values => \%values);
 }
 
+sub baseline2 {
+    my (%values);
+    App::Options->init(values => \%values);
+    App::Options->init(values => \%values);
+}
+
+sub baseline3 {
+    my (%values);
+    App::Options->init(values => \%values);
+    %values = ();
+    App::Options->init(values => \%values);
+}
+
 $count = 400;
 
 cmpthese($count, {
     'baseline' => \&baseline,
+    'baseline2' => \&baseline2,
+    'baseline3' => \&baseline3,
 });
 

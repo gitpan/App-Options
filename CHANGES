@@ -2,6 +2,17 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.96
+ x cleaned up some of the --debug_options output
+ x used File::Spec to make file/directory manipulation platform-independent (i.e. Win32)
+   NOTE: I used a mix of platform-independent File::Spec functions and explicit
+   conversion from "\" paths to POSIX-compliant "/" paths.  This is because the
+   purist form of leaving "\" paths for Win32 was causing weirdness.  When
+   I would interpolated the string or use it in a regular expression, the
+   backslashes were interacting badly.  The only reason I'm not going to 1.0
+   with this is that I want to see it pass Win32 tests on the CPAN testers
+   farm before giving it that number.
+
 VERSION 0.95
  x made a change (hack) to Build.PL to get it to work with the CPAN shell
 
