@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "0.96";
+$VERSION = "0.97";
 
 =head1 NAME
 
@@ -537,7 +537,7 @@ sub init {
 
         local(*App::Options::FILE);
         my ($option_file, $exclude_section);
-        my ($cond, @cond, $exclude);
+        my ($cond, @cond, $exclude, $heredoc_end);
         while ($#option_file > -1) {
             $option_file = shift(@option_file);
             if ($option_file =~ m!\$\{prefix\}!) {
@@ -610,7 +610,43 @@ sub init {
                     if (/^([a-zA-Z0-9_.-]+) *= *(.*)/) {  # untainting also happens
                         $var = $1;
                         $value = $2;
-                        $value =~ s/^"(.*)"$/$1/;  # quoting, var = " hello world " (enables leading/trailing spaces)
+
+                        # "here documents": var = <<EOF ... EOF
+                        if ($value =~ /^<<(.*)/) {
+                            $heredoc_end = $1;
+                            $value = "";
+                            while (<App::Options::FILE>) {
+                                last if ($_ =~ /^$heredoc_end\s*$/);
+                                $value .= $_;
+                            }
+                            $heredoc_end = "";
+                        }
+                        # get value from a file
+                        elsif ($value =~ /^<\s*(.+)/ || $value =~ /^(.+)\s*\|$/) {
+                            $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                            if (open(App::Options::FILE2, $value)) {
+                                $value = join("", <App::Options::FILE2>);
+                                close(App::Options::FILE2);
+                            }
+                            else {
+                                $value = "Can't read file [$value] for variable [$var]: $!";
+                            }
+                        }
+                        # get additional line(s) due to continuation chars
+                        elsif ($value =~ s/\s*\\\s*$/\n/) {
+                            while (<App::Options::FILE>) {
+                                if ($_ =~ s/\s*\\\s*$/\n/) {
+                                    $value .= $_;
+                                }
+                                else {
+                                    $value .= $_;
+                                    last;
+                                }
+                            }
+                        }
+                        else {
+                            $value =~ s/^"(.*)"$/$1/;  # quoting, var = " hello world " (enables leading/trailing spaces)
+                        }
 
                         print STDERR "       Var Found in File : var=[$var] value=[$value]\n" if ($debug_options >= 6);
                         

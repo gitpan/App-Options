@@ -19,6 +19,9 @@ $ENV{VAR10} = "value10";
 $ENV{APP_VAR11} = "value11";
 $ENV{VAR12} = "value12";
 
+BEGIN {
+    $App::options{testdir} = (-f "app.conf") ? "." : "t";
+}
 App::Options->init(
     option => {
         var10 => { env => "VAR10a;VAR10", },
@@ -32,7 +35,7 @@ $prefix =~ s!\\!/!g;  # transform to POSIX-compliant
 
 #print "CONF:\n   ", join("\n   ",%App::options), "\n";
 ok(%App::options, "put something in %App::options");
-is($App::options{prefix}, $prefix, "prefix = $prefix");
+#is($App::options{prefix}, $prefix, "prefix = $prefix");
 is($App::options{app}, "old", "app = old");
 is($App::options{var}, "value", "var = value");
 is($App::options{var1}, "pattern match", "pattern match");
@@ -55,7 +58,8 @@ is($App::options{var10}, "value10", "specified secondary env var works");
 %App::options = (
     config_file => "$dir/app.conf",
     prefix => "/usr/local",
-    perlinc => "/usr/mycompany/2.1.7/lib/perl5"
+    perlinc => "/usr/mycompany/2.1.7/lib/perl5",
+    testdir => (-f "app.conf") ? "." : "t",
 );
 
 App::Options->init();
@@ -68,6 +72,7 @@ is($App::options{var1}, "pattern match", "pattern match");
 is($App::options{var2}, "old pattern match", "old pattern match");
 is($INC[0], "/usr/mycompany/2.1.7/lib/perl5", "\@INC affected by perlinc");
 
+$App::otherconf{testdir} = (-f "app.conf") ? "." : "t";
 App::Options->init(\%App::otherconf);
 #print "CONF:\n   ", join("\n   ",%App::otherconf), "\n";
 ok(%App::otherconf, "put something in %App::otherconf");
@@ -77,6 +82,7 @@ is($App::otherconf{var}, "value", "var = value");
 is($App::otherconf{var1}, "pattern match", "pattern match");
 is($App::otherconf{var2}, "old pattern match", "old pattern match");
 
+$App::options3{testdir} = (-f "app.conf") ? "." : "t";
 App::Options->init(values => \%App::options3);
 #print "CONF:\n   ", join("\n   ",%App::options3), "\n";
 ok(%App::options3, "put something in %App::options3");

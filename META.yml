@@ -1,6 +1,6 @@
 ---
 name: App-Options
-version: 0.96
+version: 0.97
 author:
   - stephen.adkins@officevision.com
 abstract: 'combine command line options, environment vars, and option file values'
@@ -15,5 +15,5 @@ requires:
 provides:
   App::Options:
     file: lib/App/Options.pm
-    version: 0.96
+    version: 0.97
 generated_by: Module::Build version 0.261

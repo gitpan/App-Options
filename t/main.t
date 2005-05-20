@@ -21,6 +21,10 @@ my ($dir);
 $dir = ".";
 $dir = "t" if (! -f "app.conf");
 
+BEGIN {
+    $App::options{testdir} = (-f "app.conf") ? "." : "t";
+}
+
 use App::Options (
     option => {
         var10 => { env => "VAR10a;VAR10", },
@@ -54,10 +58,27 @@ is($App::options{var11}, "value11", "default env var works");
 is($App::options{var12}, "value12", "specified env var works");
 is($App::options{var10}, "value10", "specified secondary env var works");
 
+open(FILE2, "< $dir/file.txt");
+$file_txt = join("", <FILE2>);
+close(FILE2);
+
+is($App::options{var21}, $file_txt, "value from file");
+is($App::options{var22}, $file_txt, "value from file (2)");
+ok($App::options{var23} eq $file_txt || $App::options{var23} =~ /open/, "value from command");
+
+$var24 = <<EOF;
+This is text
+and more text
+EOF
+is($App::options{var24}, $var24, "value from here doc");
+is($App::options{var25}, $var24, "value from line continuations");
+is($App::options{var26}, "normal", "back to normal");
+
 %App::options = (
-    config_file => "$dir/app.conf",
+    config_file => "app.conf",
     prefix => "/usr/local",
-    perlinc => "/usr/mycompany/2.1.7/lib/perl5"
+    perlinc => "/usr/mycompany/2.1.7/lib/perl5",
+    testdir => (-f "app.conf") ? "." : "t",
 );
 
 App::Options->init();
@@ -70,6 +91,7 @@ is($App::options{var1}, "pattern match", "pattern match");
 is($App::options{var2}, "old pattern match", "old pattern match");
 is($INC[0], "/usr/mycompany/2.1.7/lib/perl5", "\@INC affected by perlinc");
 
+$App::otherconf{testdir} = (-f "app.conf") ? "." : "t";
 App::Options->init(\%App::otherconf);
 #print "CONF:\n   ", join("\n   ",%App::otherconf), "\n";
 ok(%App::otherconf, "put something in %App::otherconf");
@@ -79,6 +101,7 @@ is($App::otherconf{var}, "value", "var = value");
 is($App::otherconf{var1}, "pattern match", "pattern match");
 is($App::otherconf{var2}, "old pattern match", "old pattern match");
 
+$App::options3{testdir} = (-f "app.conf") ? "." : "t";
 App::Options->init(values => \%App::options3);
 #print "CONF:\n   ", join("\n   ",%App::options3), "\n";
 ok(%App::options3, "put something in %App::options3");

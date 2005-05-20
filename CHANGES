@@ -2,6 +2,11 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.97
+ x enable "here documents", var = <<EOF
+ x enable file/cmd variables, var = < filename (or "cmd|")
+ x allow line continuation chars, i.e. var = hello \\nworld
+
 VERSION 0.96
  x cleaned up some of the --debug_options output
  x used File::Spec to make file/directory manipulation platform-independent (i.e. Win32)

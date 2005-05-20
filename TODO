@@ -18,9 +18,6 @@ These are other interesting things which I might do
        4 = [1+2+3] + file options not defined by program cause errors
  o allow for subclassing (App::Options::YAML, etc.) (split up the init() method)
  o save the init(@args) for later print_usage or later reparsing
- o file/cmd variables, var = <FILE>filename (or "cmd|")
- o here documents, var = <<EOF
- o line continuation chars, i.e. var = hello \\nworld
  o setenv arg to set environment variables
  o make lots more tests (starting with the examples in the documentation)
  o make example scripts (starting with the examples in the documentation)
