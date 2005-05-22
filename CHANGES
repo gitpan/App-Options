@@ -2,6 +2,9 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.98
+ x disabled some tests that cause failure on MSWin32
+
 VERSION 0.97
  x enable "here documents", var = <<EOF
  x enable file/cmd variables, var = < filename (or "cmd|")
@@ -9,6 +12,7 @@ VERSION 0.97
 
 VERSION 0.96
  x cleaned up some of the --debug_options output
+ x tests run clean on Win32
  x used File::Spec to make file/directory manipulation platform-independent (i.e. Win32)
    NOTE: I used a mix of platform-independent File::Spec functions and explicit
    conversion from "\" paths to POSIX-compliant "/" paths.  This is because the

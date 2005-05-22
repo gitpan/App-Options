@@ -1,9 +1,9 @@
 ---
 name: App-Options
-version: 0.97
+version: 0.98
 author:
   - stephen.adkins@officevision.com
-abstract: 'combine command line options, environment vars, and option file values'
+abstract: 'Combine command line options, environment vars, and option file values'
 license: perl
 requires:
   Carp: 0
@@ -15,5 +15,5 @@ requires:
 provides:
   App::Options:
     file: lib/App/Options.pm
-    version: 0.97
+    version: 0.98
 generated_by: Module::Build version 0.261

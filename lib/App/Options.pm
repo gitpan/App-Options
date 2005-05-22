@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.16 2005/05/14 14:14:01 spadkins Exp $
+## $Id: Options.pm,v 1.18 2005/05/22 12:50:51 spadkins Exp $
 #############################################################################
 
 package App::Options;
@@ -14,11 +14,11 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "0.97";
+$VERSION = "0.98";
 
 =head1 NAME
 
-App::Options - combine command line options, environment vars, and option file values
+App::Options - Combine command line options, environment vars, and option file values
 
 =head1 SYNOPSIS
 
@@ -1536,7 +1536,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 1.16 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 1.18 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 
