@@ -58,18 +58,18 @@ is($App::options{var11}, "value11", "default env var works");
 is($App::options{var12}, "value12", "specified env var works");
 is($App::options{var10}, "value10", "specified secondary env var works");
 
-open(FILE2, "< $dir/file.txt");
-$file_txt = join("", <FILE2>);
-close(FILE2);
+#open(FILE2, "< $dir/file.txt");
+#$file_txt = join("", <FILE2>);
+#close(FILE2);
 
 #is($App::options{var21}, $file_txt, "value from file");
 #is($App::options{var22}, $file_txt, "value from file (2)");
 #ok($App::options{var23} eq $file_txt || $App::options{var23} =~ /open/, "value from command");
 
-$var24 = <<EOF;
-This is text
-and more text
-EOF
+#$var24 = <<EOF;
+#This is text
+#and more text
+#EOF
 #is($App::options{var24}, $var24, "value from here doc");
 #is($App::options{var25}, $var24, "value from line continuations");
 #is($App::options{var26}, "normal", "back to normal");

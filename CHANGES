@@ -2,6 +2,11 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 0.99
+ x fixed a condition that didn't work on Windows when executing in current dir
+ x fix double slash /usr/rubicon/test/bin//app.conf
+ x improved --debug_options, --debug_options=[1-7] output
+
 VERSION 0.98
  x disabled some tests that cause failure on MSWin32
 

@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "0.98";
+$VERSION = "0.99";
 
 =head1 NAME
 
@@ -295,8 +295,8 @@ The special options are as follows.
        which option files are being used and what the resulting variable
        values are.  The following numeric values are defined.
 
-          1 = print the basic steps of option processing and resulting @INC
-          2 = print each option file searched for and found and final values
+          1 = print the basic steps of option processing
+          2 = print each option file searched, final values, and resulting @INC
           3 = print each value as it is set in the option hash
           4 = print overrides from ENV and variable substitutions
           5 = print each line of each file with exclude_section indicator
@@ -436,6 +436,8 @@ sub init {
     # i.e. C:\perl\bin\app, \app
     ($prog_cat, $prog_dir, $prog_file) = File::Spec->splitpath($0);
     $prog_dir =~ s!\\!/!g;   # transform to POSIX-compliant (forward slashes)
+    $prog_dir =~ s!/$!! if ($prog_dir ne "/");   # remove trailing slash
+    $prog_dir =  "." if ($prog_dir eq "");
 
     print STDERR "2. Found Directory of Program. catalog=[$prog_cat] dir=[$prog_dir] file=[$prog_file]\n"
         if ($debug_options);
@@ -459,6 +461,8 @@ sub init {
     # to the directory in which the script runs.
     if (!$prefix) {
         my $abs_prog_dir = abs_path($prog_dir);
+        $abs_prog_dir =~ s!\\!/!g;   # transform to POSIX-compliant (forward slashes)
+        $abs_prog_dir =~ s!/$!! if ($abs_prog_dir ne "/");   # remove trailing slash
         if ($abs_prog_dir =~ s!/bin$!!) {
             $prefix = $abs_prog_dir;
             $prefix_origin = "parent of bin dir";
@@ -472,6 +476,7 @@ sub init {
     if (!$prefix) {   # last resort: perl's prefix
         $prefix = $Config{prefix};
         $prefix =~ s!\\!/!g;   # transform to POSIX-compliant
+        $prefix =~ s!/$!! if ($prefix ne "/");   # remove trailing slash
         $prefix_origin = "perl prefix";
     }
     print STDERR "3. Provisional prefix Set. prefix=[$prefix] origin=[$prefix_origin]\n"
@@ -552,13 +557,14 @@ sub init {
             print STDERR "   Looking for Option File [$option_file]" if ($debug_options);
             if (open(App::Options::FILE, "< $option_file")) {
                 print STDERR " : Found\n" if ($debug_options);
+                my ($orig_line);
                 while (<App::Options::FILE>) {
                     chomp;
-                    print STDERR "   [$exclude_section] $_\n" if ($debug_options >= 5);
+                    $orig_line = $_;
                     # for lines that are like "[regexp]" or even "[regexp] var = value"
                     # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
                     if (s!^ *\[(.*)\] *!!) {
-                        print STDERR "     Section : [$1]\n" if ($debug_options >= 6);
+                        print STDERR "         Checking Section : [$1]\n" if ($debug_options >= 6);
                         @cond = split(/;/,$1);   # separate the conditions that must be satisfied
                         $exclude = 0;            # assume the condition allows inclusion (! $exclude)
                         foreach $cond (@cond) {  # check each condition
@@ -573,22 +579,28 @@ sub init {
                             if ($value =~ m!^/(.*)/$!) {  # variable's value must match the regexp
                                 $regexp = $1;
                                 $exclude = ((defined $values->{$var} ? $values->{$var} : "") !~ /$regexp/) ? 1 : 0;
-                                print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) regexp=[$regexp]\n"
+                                print STDERR "         Checking Section Condition var=[$var] [$value] matches [$regexp] : result=",
+                                    ($exclude ? "[ignore]" : "[use]"), "\n"
                                     if ($debug_options >= 6);
                             }
                             elsif ($var eq "app" && ($value eq "" || $value eq "ALL")) {
                                 $exclude = 0;   # "" and "ALL" are special wildcards for the "app" variable
-                                print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) ALL\n"
+                                print STDERR "         Checking Section Condition var=[$var] [$value] = ALL : result=",
+                                    ($exclude ? "[ignore]" : "[use]"), "\n"
                                     if ($debug_options >= 6);
                             }
                             else {  # a variable's value must match exactly
                                 $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value) ? 1 : 0;
-                                print STDERR "       Cond var=[$var] value=[$value] : exclude=($exclude) equals\n"
+                                print STDERR "         Checking Section Condition var=[$var] [$value] = [",
+                                    (defined $values->{$var} ? $values->{$var} : ""),
+                                    "] : result=",
+                                    ($exclude ? "[ignore]" : "[use]"), "\n"
                                     if ($debug_options >= 6);
                             }
                             last if ($exclude);
                         }
                         s/^#.*$//;               # delete comments
+                        print STDERR "      ", ($exclude ? "[ignore]" : "[use]   "), " $orig_line\n" if ($debug_options >= 5);
                         if ($_) {
                             # this is a single-line condition, don't change the $exclude_section flag
                             next if ($exclude);
@@ -598,6 +610,9 @@ sub init {
                             $exclude_section = $exclude;
                             next;
                         }
+                    }
+                    else {
+                        print STDERR "      ", ($exclude_section ? "[ignore]" : "[use]   "), " $orig_line\n" if ($debug_options >= 5);
                     }
                     next if ($exclude_section);
 
@@ -648,7 +663,7 @@ sub init {
                             $value =~ s/^"(.*)"$/$1/;  # quoting, var = " hello world " (enables leading/trailing spaces)
                         }
 
-                        print STDERR "       Var Found in File : var=[$var] value=[$value]\n" if ($debug_options >= 6);
+                        print STDERR "         Var Found in File : var=[$var] value=[$value]\n" if ($debug_options >= 6);
                         
                         # TODO: here documents, var = <<EOF
                         # only add values which have never been defined before
@@ -678,10 +693,10 @@ sub init {
                                 if ($value =~ /\{.*\}/) {
                                     $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
                                     $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
-                                    print STDERR "       File Var Underwent Substitutions : [$var] = [$value]\n"
+                                    print STDERR "         File Var Underwent Substitutions : [$var] = [$value]\n"
                                         if ($debug_options >= 4);
                                 }
-                                print STDERR "       File Var : var=[$var] value=[$value]\n" if ($debug_options >= 3);
+                                print STDERR "         Var Used : var=[$var] value=[$value]\n" if ($debug_options >= 3);
                                 $values->{$var} = $value;    # save all in %App::options
                             }
                         }
@@ -744,7 +759,7 @@ sub init {
                     foreach $env_var (@env_vars) {
                         if ($env_var && defined $ENV{$env_var}) {
                             $value = $ENV{$env_var};
-                            print STDERR "   Env Var Found : [$var] = [$value] from [$env_var] of [@env_vars].\n"
+                            print STDERR "         Env Var Found : [$var] = [$value] from [$env_var] of [@env_vars].\n"
                                 if ($debug_options >= 4);
                             last;
                         }
@@ -755,11 +770,11 @@ sub init {
                     if ($value =~ /\{.*\}/) {
                         $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
                         $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
-                        print STDERR "   Env Var Underwent Substitutions : [$var] = [$value]\n"
+                        print STDERR "         Env Var Underwent Substitutions : [$var] = [$value]\n"
                             if ($debug_options >= 4);
                     }
                     else {
-                        print STDERR "   Env Var : [$var] = [$value]\n"
+                        print STDERR "         Env Var : [$var] = [$value]\n"
                             if ($debug_options >= 3);
                     }
                     $values->{$var} = $value;    # save all in %App::options
@@ -773,7 +788,7 @@ sub init {
             $var =~ s/^app_//;
             if (! defined $values->{$var}) {
                 $values->{$var} = $ENV{$env_var};
-                print STDERR "   Env Var [$var] = [$value] from [$env_var] (assumed).\n"
+                print STDERR "         Env Var [$var] = [$value] from [$env_var] (assumed).\n"
                     if ($debug_options >= 3);
             }
         }
@@ -821,7 +836,7 @@ sub init {
                             if ($debug_options >= 4);
                     }
                     $values->{$var} = $value;    # save all in %App::options
-                    print STDERR "   Default Var [$var] = [$value]\n" if ($debug_options >= 3);
+                    print STDERR "         Default Var [$var] = [$value]\n" if ($debug_options >= 3);
                 }
             }
         }
@@ -840,13 +855,13 @@ sub init {
     if (defined $values->{perlinc}) {    # add perlinc entries
         if ($values->{perlinc}) {
             unshift(@INC, split(/[,; ]+/,$values->{perlinc}));
-            if ($debug_options) {
+            if ($debug_options >= 2) {
                 print STDERR "9. perlinc Directories Added to \@INC\n   ",
                     join("\n   ", @INC), "\n";
             }
         }
         else {
-            print STDERR "9. No Directories Added to \@INC\n" if ($debug_options);
+            print STDERR "9. No Directories Added to \@INC\n" if ($debug_options >= 2);
         }
     }
     else {
@@ -890,7 +905,7 @@ sub init {
                 unshift(@INC, "$libdir/perl5/$perlversion");
             }
         }
-        if ($debug_options) {
+        if ($debug_options >= 2) {
             print STDERR "9. Standard Directories Added to \@INC\n   ",
                 join("\n   ", @INC), "\n";
         }
@@ -900,7 +915,7 @@ sub init {
     # 10. print stuff out for options debugging
     #################################################################
 
-    if ($debug_options >= 2) {
+    if ($debug_options >= 7) {
         print STDERR "FINAL VALUES: \%App::options (or other) =\n";
         foreach $var (sort keys %$values) {
             if (defined $values->{$var}) {
