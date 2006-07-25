@@ -1,17 +1,16 @@
-######################################################################
-## File: $Id: TODO,v 1.11 2005/05/20 19:27:13 spadkins Exp $
+x######################################################################
+## File: $Id: TODO 6702 2006-07-25 01:43:27Z spadkins $
 ######################################################################
 
 These items are what will be required to go to version 1.00.
  o [no more critical items]
 
 These are other interesting things which I might do
- o make --debug_options=9 more readable
+ o make --debug_options=9 even more readable
  o improve ease-of-use (enhanced help display) for more advanced features (i.e. debug_options=9)
  o clean up use of --version_modules (when to show all)
  o incorporate LWP::UserAgent->get() as a standard way to get a conf
  o VERSION option in program sets the $main::VERSION
- o investigate why $PREFIX/lib gets added to @INC twice
  o "strict" option:
        0 = no strictness
        1 = unknown cmd line options cause error (file can define options),

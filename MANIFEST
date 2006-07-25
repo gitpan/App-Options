@@ -1,4 +1,3 @@
-Build.PL
 CHANGES
 MANIFEST
 Makefile.PL
@@ -16,6 +15,7 @@ t/test2
 t/test3
 t/test4
 t/test5
+t/file.txt
 benchmark/run
 examples/app.conf
 examples/test1

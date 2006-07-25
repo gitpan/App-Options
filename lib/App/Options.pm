@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm,v 1.18 2005/05/22 12:50:51 spadkins Exp $
+## $Id: Options.pm 6702 2006-07-25 01:43:27Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,11 +14,11 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "0.99";
+$VERSION = "1.00";
 
 =head1 NAME
 
-App::Options - Combine command line options, environment vars, and option file values
+App::Options - Combine command line options, environment vars, and option file values (for program configuration)
 
 =head1 SYNOPSIS
 
@@ -302,6 +302,7 @@ The special options are as follows.
           5 = print each line of each file with exclude_section indicator
           6 = print option file section tags, condition evaluation, and
               each value found (even if it is not set in the final values)
+          7 = print final values
 
     import - a list of additional option files to be processed.
        An imported file goes on the head of the queue of files to be
@@ -1551,7 +1552,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 1.18 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 6702 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 

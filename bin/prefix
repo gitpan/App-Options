@@ -2,7 +2,7 @@
 #*********************************************************************
 #** prefix
 #*********************************************************************
-#** @(#)$Id: prefix,v 1.2 2005/01/30 23:06:04 spadkins Exp $
+#** @(#)$Id: prefix 3593 2006-03-03 06:31:06Z spadkins $
 #*********************************************************************
 
 export OLD_PREFIX=$PREFIX
@@ -148,6 +148,10 @@ else
 
       # Remove old references from the LD_LIBRARY_PATH
       OLD_LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
+      if [ "$OLD_LD_LIBRARY_PATH" = "" ]
+      then
+          OLD_LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/lib"
+      fi
       export LD_LIBRARY_PATH=""
       export LD_LIBRARY_PATH=`echo $OLD_LD_LIBRARY_PATH | \
              sed -e "s/^:*/:/" \
@@ -160,6 +164,10 @@ else
 
       # Remove old references from the LIBPATH
       OLD_LIBPATH="$LIBPATH"
+      if [ "$OLD_LIBPATH" = "" ]
+      then
+          OLD_LIBPATH="/usr/local/lib:/usr/lib:/lib"
+      fi
       export LIBPATH=""
       export LIBPATH=`echo $OLD_LIBPATH | \
              sed -e "s/^:*/:/" \
@@ -171,6 +179,10 @@ else
       unset OLD_LIBPATH
 
       # Remove old references from the MANPATH
+      if [ "$MANPATH" = "" ]
+      then
+          MANPATH="/usr/local/man:/usr/share/man:/usr/man:/man"
+      fi
       export MANPATH=`echo $MANPATH | \
              sed -e "s/^:*/:/" \
                  -e "s/:*$/:/" \
