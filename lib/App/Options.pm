@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.00";
+$VERSION = "1.01";
 
 =head1 NAME
 

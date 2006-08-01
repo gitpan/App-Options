@@ -1,15 +1,14 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         App-Options
-version:      1.00
+version:      1.01
 version_from: lib/App/Options.pm
 installdirs:  site
 requires:
-    Carp:                          0
-    Config:                        0
-    Cwd:                           0
-    File::Spec:                    0
-    Sys::Hostname:                 0
+    Carp:                          0.01
+    Cwd:                           0.01
+    File::Spec:                    0.01
+    Sys::Hostname:                 0.01
 
 distribution_type: module
 generated_by: ExtUtils::MakeMaker version 6.30

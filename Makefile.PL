@@ -17,11 +17,11 @@ my @programs = (
     'VERSION_FROM' => 'lib/App/Options.pm',
     'EXE_FILES'    => [ @programs ],
     'PREREQ_PM'    => {
-        "Carp"           => 0,  # use croak() instead of die()
-        "Sys::Hostname"  => 0,  # use hostname() to get hostname/host options
-        "Cwd"            => 0,  # use abs_path() to turn relative to absolute directory
-        "File::Spec"     => 0,  # make directory handling work cross-platform (i.e. MSWin)
-        "Config"         => 0,  # find prefix directory for the installation of perl
+        "Carp"           => "0.01",  # use croak() instead of die()
+        "Sys::Hostname"  => "0.01",  # use hostname() to get hostname/host options
+        "Cwd"            => "0.01",  # use abs_path() to turn relative to absolute directory
+        "File::Spec"     => "0.01",  # make directory handling work cross-platform (i.e. MSWin)
+        #"Config"         => "0.01",  # find prefix directory for the installation of perl
     },
     'dist'         => {'COMPRESS'=>'gzip -9f', 'SUFFIX' => 'gz',
                        'ZIP'=>'/usr/bin/zip', 'ZIPFLAGS'=>'-rl'},

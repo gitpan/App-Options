@@ -2,6 +2,14 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.01
+ x removed dependency in Makefile.PL on Config.pm (which was causing a false error on "make test")
+
+VERSION 1.00
+ x clean up for v1.00. no dependency on Module::Build (which has been giving problems)
+ x add default values for MANPATH, LD_LIBRARY_PATH to bin/prefix
+ x added t/file.txt so the test process doesn't spew warnings
+
 VERSION 0.99
  x fixed a condition that didn't work on Windows when executing in current dir
  x fix double slash /usr/rubicon/test/bin//app.conf
