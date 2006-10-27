@@ -57,6 +57,8 @@ is($App::options{var8}, "value8", "ALL works");
 is($App::options{var11}, "value11", "default env var works");
 is($App::options{var12}, "value12", "specified env var works");
 is($App::options{var10}, "value10", "specified secondary env var works");
+is($ENV{LD_LIBRARY_PATH}, "/usr/local/foo/lib", "set environment variables [$ENV{LD_LIBRARY_PATH}]");
+is($App::options{continuation}, "hello, world!", "line continuation characters (\\) [$App::options{continuation}]");
 
 #open(FILE2, "< $dir/file.txt");
 #$file_txt = join("", <FILE2>);

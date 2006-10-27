@@ -2,6 +2,12 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.02
+ x ENV{FOO} = x in app.conf sets environment variable "FOO" (i.e. LD_LIBRARY_PATH)
+ x added perl_restart option to re-exec() the program so that it picks up a new LD_LIBRARY_PATH
+ x save original @ARGV to @App::Options::ARGV (used for perl_restart/re-exec())
+ x line continuation characters strip off newlines and leading spaces
+
 VERSION 1.01
  x removed dependency in Makefile.PL on Config.pm (which was causing a false error on "make test")
 

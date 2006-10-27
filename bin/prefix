@@ -2,7 +2,7 @@
 #*********************************************************************
 #** prefix
 #*********************************************************************
-#** @(#)$Id: prefix 3593 2006-03-03 06:31:06Z spadkins $
+#** @(#)$Id: prefix 7988 2006-10-27 18:39:02Z spadkins $
 #*********************************************************************
 
 export OLD_PREFIX=$PREFIX
@@ -134,7 +134,7 @@ else
       do
          SED_CLEAN_PATH="$SED_CLEAN_PATH -e s!:$AUX_DIR/bin!!g"
          SED_CLEAN_LIBPATH="$SED_CLEAN_LIBPATH -e s!:$AUX_DIR/lib!!g"
-         SED_CLEAN_MANPATH="$SED_CLEAN_MANPATH -e s!:$AUX_DIR/man!!g"
+         SED_CLEAN_MANPATH="$SED_CLEAN_MANPATH -e s!:$AUX_DIR/man!!g -e s!:$AUX_DIR/share/man!!g"
       done
 
       # Remove old references from the PATH
@@ -280,9 +280,9 @@ else
       # Add new references into the MANPATH
       if [[ "$MANPATH" = "" ]]
       then
-         export MANPATH=$AUX_MANPATH$PREFIX/man$AUX_MANPATHPOST
+         export MANPATH=$AUX_MANPATH$PREFIX/share/man:$PREFIX/man$AUX_MANPATHPOST
       else
-         export MANPATH=$AUX_MANPATH$PREFIX/man$AUX_MANPATHPOST:$MANPATH
+         export MANPATH=$AUX_MANPATH$PREFIX/share/man:$PREFIX/man$AUX_MANPATHPOST:$MANPATH
       fi
 
    fi

@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 6702 2006-07-25 01:43:27Z spadkins $
+## $Id: Options.pm 7987 2006-10-27 18:36:50Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.01";
+$VERSION = "1.02";
 
 =head1 NAME
 
@@ -398,6 +398,9 @@ sub init {
     my $debug_options = $values->{debug_options} || 0;
     my $show_help = 0;
     my $show_version = 0;
+
+    @App::Options::ARGV = @ARGV;  # save the initial @ARGV
+
     if (! $init_args{no_cmd_args}) {
         while ($#ARGV >= 0 && $ARGV[0] =~ /^--?([^=-][^=]*)(=?)(.*)/) {
             $var = $1;
@@ -623,7 +626,7 @@ sub init {
                     next if (/^$/);  # skip blank lines
 
                     # look for "var = value" (ignore other lines)
-                    if (/^([a-zA-Z0-9_.-]+) *= *(.*)/) {  # untainting also happens
+                    if (/^([a-zA-Z0-9_.-{}]+) *= *(.*)/) {  # untainting also happens
                         $var = $1;
                         $value = $2;
 
@@ -649,12 +652,15 @@ sub init {
                             }
                         }
                         # get additional line(s) due to continuation chars
-                        elsif ($value =~ s/\s*\\\s*$/\n/) {
+                        elsif ($value =~ s/\\\s*$//) {
                             while (<App::Options::FILE>) {
-                                if ($_ =~ s/\s*\\\s*$/\n/) {
+                                if ($_ =~ s/\\\s*[\r\n]*$//) {   # remove trailing newline
+                                    s/^\s+//;  # remove leading space when following a line continuation character
                                     $value .= $_;
                                 }
                                 else {
+                                    chomp;     # remove trailing newline when following a line continuation character
+                                    s/^\s+//;  # remove leading space when following a line continuation character
                                     $value .= $_;
                                     last;
                                 }
@@ -666,9 +672,12 @@ sub init {
 
                         print STDERR "         Var Found in File : var=[$var] value=[$value]\n" if ($debug_options >= 6);
                         
-                        # TODO: here documents, var = <<EOF
                         # only add values which have never been defined before
-                        if (!defined $values->{$var}) {
+                        if ($var =~ /^ENV\{([^{}]+)\}$/) {
+                            $env_var = $1;
+                            $ENV{$env_var} = $value;
+                        }
+                        elsif (!defined $values->{$var}) {
                             if (!$init_args{no_env_vars}) {
                                 if ($option && defined $option->{$var} && defined $option->{$var}{env}) {
                                     if ($option->{$var}{env} eq "") {
@@ -722,6 +731,10 @@ sub init {
     }
     else {
         print STDERR "5. Skip Option File Processing\n" if ($debug_options);
+    }
+    if ($values->{perl_restart} && !$ENV{PERL_RESTART}) {
+        $ENV{PERL_RESTART} = 1;
+        exec($^X, $0, @App::Options::ARGV);
     }
 
     #################################################################
@@ -1425,6 +1438,43 @@ After checking the environment for override values,
 any value which includes a variable undergoes variable substitution
 before it is placed in the option hash.
 
+=head2 Setting Environment Variables from Option Files
+
+Any variable of the form "ENV{XYZ}" will set the variable XYZ in
+the environment rather than in the options hash.  Thus, the syntax
+
+  ENV{LD_LIBRARY_PATH} = ${prefix}/lib
+
+will enhance the LD_LIBRARY_PATH appropriately.
+
+Note that this only works for options set in an options file.
+It does not work for options set on the command line, from the
+environment itself, or from the program-supplied default.
+
+Under some circumstances, the perl interpreter will
+need to be restarted in order to pick up the new LD_LIBRARY_PATH.
+In that case, you can include the special option
+
+  perl_restart = 1
+
+An example of where this might be useful is for CGI scripts that
+use the DBI and DBD::Oracle because the Oracle libraries are 
+dynamically linked at runtime.
+
+NOTE: The other standard way to handle CGI scripts which require special
+environment variables to be set is with Apache directives in the
+httpd.conf or .htaccess files. i.e.
+
+  SetEnv LD_LIBRARY_PATH /home/oracle/oracle/product/10.2.0/oraclient/lib
+  SetEnv ORACLE_HOME /home/oracle/oracle/product/10.2.0/oraclient
+
+NOTE: Yet another standard way to handle CGI scripts which require
+an enhanced LD_LIBRARY_PATH specifically is to use the /etc/ld.so.conf
+file.  Edit /etc/ld.so.conf and then run ldconfig (as root).
+This adds your specific path to the "standard system places" that
+are searched for shared libraries.  This has nothing to do with
+App::Options or environment variables of course.
+
 =head2 import and flush_imports
 
 After each option file is read, the special option "flush_imports"
@@ -1552,7 +1602,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 6702 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 7987 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 
@@ -1944,7 +1994,7 @@ I welcome all feedback, bug reports, and feature requests.
 
 =head1 ACKNOWLEDGEMENTS
 
- * Author:  Stephen Adkins <stephen.adkins@officevision.com>
+ * Author:  Stephen Adkins <spadkins@gmail.com>
  * License: This is free software. It is licensed under the same terms as Perl itself.
 
 =head1 SEE ALSO

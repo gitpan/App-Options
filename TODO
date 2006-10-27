@@ -1,5 +1,5 @@
 x######################################################################
-## File: $Id: TODO 6702 2006-07-25 01:43:27Z spadkins $
+## File: $Id: TODO 7990 2006-10-27 18:40:09Z spadkins $
 ######################################################################
 
 These items are what will be required to go to version 1.00.
@@ -19,7 +19,6 @@ These are other interesting things which I might do
        4 = [1+2+3] + file options not defined by program cause errors
  o allow for subclassing (App::Options::YAML, etc.) (split up the init() method)
  o save the init(@args) for later print_usage or later reparsing
- o setenv arg to set environment variables
  o make lots more tests (starting with the examples in the documentation)
  o make example scripts (starting with the examples in the documentation)
  o enforce other option parsing rules (single letter + arg, single/double dash)
