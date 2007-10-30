@@ -1,11 +1,13 @@
 x######################################################################
-## File: $Id: TODO 7990 2006-10-27 18:40:09Z spadkins $
+## File: $Id: TODO 10141 2007-10-30 19:11:51Z spadkins $
 ######################################################################
 
-These items are what will be required to go to version 1.00.
+These items are what will be required to go to the next release to CPAN
+ o Get the documentation to match the new organization of the code
  o [no more critical items]
 
 These are other interesting things which I might do
+ o Create a sample subclassing distribution (i.e. App::Options::YAML)
  o make --debug_options=9 even more readable
  o improve ease-of-use (enhanced help display) for more advanced features (i.e. debug_options=9)
  o clean up use of --version_modules (when to show all)
@@ -17,8 +19,6 @@ These are other interesting things which I might do
        2 = [1] + silently don't include env+file options not defined by program
        3 = [1+2] + unknown cmd line options cause error (program only can define options)
        4 = [1+2+3] + file options not defined by program cause errors
- o allow for subclassing (App::Options::YAML, etc.) (split up the init() method)
- o save the init(@args) for later print_usage or later reparsing
  o make lots more tests (starting with the examples in the documentation)
  o make example scripts (starting with the examples in the documentation)
  o enforce other option parsing rules (single letter + arg, single/double dash)

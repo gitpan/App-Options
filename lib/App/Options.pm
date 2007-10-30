@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 7987 2006-10-27 18:36:50Z spadkins $
+## $Id: Options.pm 10140 2007-10-30 19:09:10Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.02";
+$VERSION = "1.03";
 
 =head1 NAME
 
@@ -319,35 +319,69 @@ The special options are as follows.
 
 =cut
 
-my (@options);
+my ($default_option_processor);  # a reference to the singleton App::Options object that parsed the command line
 
-sub init {
-    # can call as a function (&App::Options::init()) or a static method (App::Options->init())
-    shift if ($#_ > -1 && $_[0] eq "App::Options");
+# This translates the procedural App::Options::import() into the class method App::Options->_import() (for subclassing)
+sub import {
+    my ($package, @args) = @_;
+    $package->_import(@args);
+}
 
-    # can supply initial hashref to use for option values instead of global %App::options
-    my $values = ($#_ > -1 && ref($_[0]) eq "HASH") ? shift : \%App::options;
+sub _import_test {
+    my ($class, @args) = @_;
+    $default_option_processor = undef;
+    $class->_import(@args);
+}
 
-    ($#_ % 2 == 1) || croak "App::Options->init(): must have an even number of vars/values for named args";
-    my %init_args = @_;
-    # "values" in named arg list overrides the one supplied as an initial hashref
-    if (defined $init_args{values}) {
-        (ref($init_args{values}) eq "HASH") || croak "App::Options->init(): 'values' arg must be a hash reference";
-        $values = $init_args{values};
+sub _import {
+    my ($class, @args) = @_;
+
+    # We only do this once (the default App::Options option processor is a singleton)
+    if (!$default_option_processor) {
+        # can supply initial hashref to use for option values instead of global %App::options
+        my $values = ($#args > -1 && ref($args[0]) eq "HASH") ? shift(@args) : \%App::options;
+
+        ($#args % 2 == 1) || croak "App::Options::import(): must have an even number of vars/values for named args";
+        my $init_args = { @args };
+
+        # "values" in named arg list overrides the one supplied as an initial hashref
+        if (defined $init_args->{values}) {
+            (ref($init_args->{values}) eq "HASH") || croak "App::Options->new(): 'values' arg must be a hash reference";
+            $values = $init_args->{values};
+        }
+
+        my $option_processor = $class->new($init_args);
+        $default_option_processor = $option_processor;   # save it in the singleton location
+
+        $option_processor->read_options($values);        # read in all the options from various places
+        $option_processor->{values} = $values;           # store it for future (currently undefined) uses
     }
-    else {
-        $init_args{values} = $values;
-    }
+}
+
+sub new {
+    my ($this, $init_args) = @_;
+    my $class = ref($this) || $this;
+    my $self = {};
+    $self->{init_args} = $init_args;
+    $self->{argv}      = [ @ARGV ];
+    $self->{options}   = [ ];
+    bless $self, $class;
+    return($self);
+}
+
+sub read_options {
+    my ($self, $values) = @_;
 
     #######################################################################
     # populate "option" (the information about each option!)
     #######################################################################
 
     my ($var, $value, @vars, $option);
-    $option = $init_args{option};
+    my $init_args = $self->{init_args};
+    $option = $init_args->{option};
 
     if ($option) {
-        croak "App::Options->init(): 'option' arg must be a hash reference"
+        croak "App::Options->read_options(): 'option' arg must be a hash reference"
             if (ref($option) ne "HASH");
 
         my (@args, $hash, $arg);
@@ -399,13 +433,12 @@ sub init {
     my $show_help = 0;
     my $show_version = 0;
 
-    @App::Options::ARGV = @ARGV;  # save the initial @ARGV
-
-    if (! $init_args{no_cmd_args}) {
+    if (! $init_args->{no_cmd_args}) {
+        my $options = $self->{options};
         while ($#ARGV >= 0 && $ARGV[0] =~ /^--?([^=-][^=]*)(=?)(.*)/) {
             $var = $1;
             $value = ($2 eq "") ? 1 : $3;
-            push(@options, shift @ARGV);
+            push(@$options, shift @ARGV);
             $values->{$var} = $value;
         }
         if ($#ARGV >= 0 && $ARGV[0] eq "--") {
@@ -424,7 +457,7 @@ sub init {
             delete $values->{version};
         }
         $debug_options = $values->{debug_options} || 0;
-        print STDERR "1. Parsed Command Line Options. [@options]\n" if ($debug_options);
+        print STDERR "1. Parsed Command Line Options. [@$options]\n" if ($debug_options);
     }
     else {
         print STDERR "1. Skipped Command Line Option Parsing.\n" if ($debug_options);
@@ -522,19 +555,19 @@ sub init {
     print STDERR "4. Set app variable. app=[$app] origin=[$app_origin]\n" if ($debug_options);
 
     my ($env_var, @env_vars, $regexp);
-    if (! $init_args{no_option_file}) {
+    if (! $init_args->{no_option_file}) {
         #################################################################
         # 5. Define the standard places to look for an option file
         #################################################################
-        my @option_file = ();
-        push(@option_file, $values->{option_file}) if ($values->{option_file});
-        push(@option_file, "$ENV{HOME}/.app/$app.conf") if ($ENV{HOME} && $app ne "app");
-        push(@option_file, "$ENV{HOME}/.app/app.conf") if ($ENV{HOME});
-        push(@option_file, "$prog_dir/$app.conf") if ($app ne "app");
-        push(@option_file, "$prog_dir/app.conf");
-        push(@option_file, "\${prefix}/etc/app/$app.conf") if ($app ne "app");
-        push(@option_file, "\${prefix}/etc/app/app.conf");
-        push(@option_file, "/etc/app/app.conf");
+        my @option_files = ();
+        push(@option_files, $values->{option_file}) if ($values->{option_file});
+        push(@option_files, "$ENV{HOME}/.app/$app.conf") if ($ENV{HOME} && $app ne "app");
+        push(@option_files, "$ENV{HOME}/.app/app.conf") if ($ENV{HOME});
+        push(@option_files, "$prog_dir/$app.conf") if ($app ne "app");
+        push(@option_files, "$prog_dir/app.conf");
+        push(@option_files, "\${prefix}/etc/app/$app.conf") if ($app ne "app");
+        push(@option_files, "\${prefix}/etc/app/app.conf");
+        push(@option_files, "/etc/app/app.conf");
 
         #################################################################
         # 5. now actually read in the file(s)
@@ -544,189 +577,8 @@ sub init {
         #################################################################
         print STDERR "5. Scanning Option Files\n" if ($debug_options);
 
-        local(*App::Options::FILE);
-        my ($option_file, $exclude_section);
-        my ($cond, @cond, $exclude, $heredoc_end);
-        while ($#option_file > -1) {
-            $option_file = shift(@option_file);
-            if ($option_file =~ m!\$\{prefix\}!) {
-                if ($values->{prefix}) {
-                    $option_file =~ s!\$\{prefix\}!$values->{prefix}!;
-                }
-                else {
-                    $option_file =~ s!\$\{prefix\}!$prefix!;
-                }
-            }
-            $exclude_section = 0;
-            print STDERR "   Looking for Option File [$option_file]" if ($debug_options);
-            if (open(App::Options::FILE, "< $option_file")) {
-                print STDERR " : Found\n" if ($debug_options);
-                my ($orig_line);
-                while (<App::Options::FILE>) {
-                    chomp;
-                    $orig_line = $_;
-                    # for lines that are like "[regexp]" or even "[regexp] var = value"
-                    # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
-                    if (s!^ *\[(.*)\] *!!) {
-                        print STDERR "         Checking Section : [$1]\n" if ($debug_options >= 6);
-                        @cond = split(/;/,$1);   # separate the conditions that must be satisfied
-                        $exclude = 0;            # assume the condition allows inclusion (! $exclude)
-                        foreach $cond (@cond) {  # check each condition
-                            if ($cond =~ /^([^=]+)=(.*)$/) {  # i.e. [city=ATL] or [name=/[Ss]tephen/]
-                                $var = $1;
-                                $value = $2;
-                            }
-                            else {              # i.e. [go] matches the program (app) named "go"
-                                $var = "app";
-                                $value = $cond;
-                            }
-                            if ($value =~ m!^/(.*)/$!) {  # variable's value must match the regexp
-                                $regexp = $1;
-                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") !~ /$regexp/) ? 1 : 0;
-                                print STDERR "         Checking Section Condition var=[$var] [$value] matches [$regexp] : result=",
-                                    ($exclude ? "[ignore]" : "[use]"), "\n"
-                                    if ($debug_options >= 6);
-                            }
-                            elsif ($var eq "app" && ($value eq "" || $value eq "ALL")) {
-                                $exclude = 0;   # "" and "ALL" are special wildcards for the "app" variable
-                                print STDERR "         Checking Section Condition var=[$var] [$value] = ALL : result=",
-                                    ($exclude ? "[ignore]" : "[use]"), "\n"
-                                    if ($debug_options >= 6);
-                            }
-                            else {  # a variable's value must match exactly
-                                $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value) ? 1 : 0;
-                                print STDERR "         Checking Section Condition var=[$var] [$value] = [",
-                                    (defined $values->{$var} ? $values->{$var} : ""),
-                                    "] : result=",
-                                    ($exclude ? "[ignore]" : "[use]"), "\n"
-                                    if ($debug_options >= 6);
-                            }
-                            last if ($exclude);
-                        }
-                        s/^#.*$//;               # delete comments
-                        print STDERR "      ", ($exclude ? "[ignore]" : "[use]   "), " $orig_line\n" if ($debug_options >= 5);
-                        if ($_) {
-                            # this is a single-line condition, don't change the $exclude_section flag
-                            next if ($exclude);
-                        }
-                        else {
-                            # this condition pertains to all lines after it
-                            $exclude_section = $exclude;
-                            next;
-                        }
-                    }
-                    else {
-                        print STDERR "      ", ($exclude_section ? "[ignore]" : "[use]   "), " $orig_line\n" if ($debug_options >= 5);
-                    }
-                    next if ($exclude_section);
+        $self->read_option_files($values, \@option_files, $prefix);
 
-                    s/#.*$//;        # delete comments
-                    s/^ +//;         # delete leading spaces
-                    s/ +$//;         # delete trailing spaces
-                    next if (/^$/);  # skip blank lines
-
-                    # look for "var = value" (ignore other lines)
-                    if (/^([a-zA-Z0-9_.-{}]+) *= *(.*)/) {  # untainting also happens
-                        $var = $1;
-                        $value = $2;
-
-                        # "here documents": var = <<EOF ... EOF
-                        if ($value =~ /^<<(.*)/) {
-                            $heredoc_end = $1;
-                            $value = "";
-                            while (<App::Options::FILE>) {
-                                last if ($_ =~ /^$heredoc_end\s*$/);
-                                $value .= $_;
-                            }
-                            $heredoc_end = "";
-                        }
-                        # get value from a file
-                        elsif ($value =~ /^<\s*(.+)/ || $value =~ /^(.+)\s*\|$/) {
-                            $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
-                            if (open(App::Options::FILE2, $value)) {
-                                $value = join("", <App::Options::FILE2>);
-                                close(App::Options::FILE2);
-                            }
-                            else {
-                                $value = "Can't read file [$value] for variable [$var]: $!";
-                            }
-                        }
-                        # get additional line(s) due to continuation chars
-                        elsif ($value =~ s/\\\s*$//) {
-                            while (<App::Options::FILE>) {
-                                if ($_ =~ s/\\\s*[\r\n]*$//) {   # remove trailing newline
-                                    s/^\s+//;  # remove leading space when following a line continuation character
-                                    $value .= $_;
-                                }
-                                else {
-                                    chomp;     # remove trailing newline when following a line continuation character
-                                    s/^\s+//;  # remove leading space when following a line continuation character
-                                    $value .= $_;
-                                    last;
-                                }
-                            }
-                        }
-                        else {
-                            $value =~ s/^"(.*)"$/$1/;  # quoting, var = " hello world " (enables leading/trailing spaces)
-                        }
-
-                        print STDERR "         Var Found in File : var=[$var] value=[$value]\n" if ($debug_options >= 6);
-                        
-                        # only add values which have never been defined before
-                        if ($var =~ /^ENV\{([^{}]+)\}$/) {
-                            $env_var = $1;
-                            $ENV{$env_var} = $value;
-                        }
-                        elsif (!defined $values->{$var}) {
-                            if (!$init_args{no_env_vars}) {
-                                if ($option && defined $option->{$var} && defined $option->{$var}{env}) {
-                                    if ($option->{$var}{env} eq "") {
-                                        @env_vars = ();
-                                    }
-                                    else {
-                                        @env_vars = split(/[,;]/, $option->{$var}{env});
-                                    }
-                                }
-                                else {
-                                    @env_vars = ( "APP_" . uc($var) );
-                                }
-                                foreach $env_var (@env_vars) {
-                                    if ($env_var && defined $ENV{$env_var}) {
-                                        $value = $ENV{$env_var};
-                                        print STDERR "       Override File Value from Env : var=[$var] value=[$value] from [$env_var] of [@env_vars]\n" if ($debug_options >= 4);
-                                        last;
-                                    }
-                                }
-                            }
-                            # do variable substitutions, var = ${prefix}/bin, var = $ENV{PATH}
-                            if (defined $value) {
-                                if ($value =~ /\{.*\}/) {
-                                    $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
-                                    $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
-                                    print STDERR "         File Var Underwent Substitutions : [$var] = [$value]\n"
-                                        if ($debug_options >= 4);
-                                }
-                                print STDERR "         Var Used : var=[$var] value=[$value]\n" if ($debug_options >= 3);
-                                $values->{$var} = $value;    # save all in %App::options
-                            }
-                        }
-                    }
-                }
-                close(App::Options::FILE);
-
-                if ($values->{flush_imports}) {
-                    @option_file = ();  # throw out other files to look for
-                    delete $values->{flush_imports};
-                }
-                if ($values->{import}) {
-                    unshift(@option_file, split(/[,; ]+/, $values->{import}));
-                    delete $values->{import};
-                }
-            }
-            else {
-                print STDERR "\n" if ($debug_options);
-            }
-        }
         $debug_options = $values->{debug_options} || 0;
     }
     else {
@@ -734,19 +586,19 @@ sub init {
     }
     if ($values->{perl_restart} && !$ENV{PERL_RESTART}) {
         $ENV{PERL_RESTART} = 1;
-        exec($^X, $0, @App::Options::ARGV);
+        exec($^X, $0, @{$self->{argv}});
     }
 
     #################################################################
     # 6. fill in ENV vars
     #################################################################
 
-    if (!$init_args{no_env_vars}) {
+    if (!$init_args->{no_env_vars}) {
         @vars = ();
-        if ($init_args{options}) {
-            croak "App::Options->init(): 'options' arg must be an array reference"
-                if (ref($init_args{options}) ne "ARRAY");
-            push(@vars, @{$init_args{options}});
+        if ($init_args->{options}) {
+            croak "App::Options->read_options(): 'options' arg must be an array reference"
+                if (ref($init_args->{options}) ne "ARRAY");
+            push(@vars, @{$init_args->{options}});
         }
 
         if ($option) {
@@ -758,7 +610,7 @@ sub init {
         foreach $var (@vars) {
             if (!defined $values->{$var}) {
                 $value = undef;
-                if (!$init_args{no_env_vars}) {
+                if (!$init_args->{no_env_vars}) {
                     if ($option && defined $option->{$var}{env}) {
                         if ($option->{$var}{env} eq "") {
                             @env_vars = ();
@@ -833,7 +685,7 @@ sub init {
     # 8. set defaults
     #################################################################
     if ($option) {
-        @vars = (defined $init_args{options}) ? @{$init_args{options}} : ();
+        @vars = (defined $init_args->{options}) ? @{$init_args->{options}} : ();
         push(@vars, (sort keys %$option));
 
         print STDERR "8. Set Defaults.\n" if ($debug_options);
@@ -1033,26 +885,18 @@ sub init {
     }
 
     if ($exit_status >= 0) {
-        if ($init_args{print_usage}) {
-            &{$init_args{print_usage}}($values, \%init_args);
+        if ($init_args->{print_usage}) {
+            &{$init_args->{print_usage}}($values, $init_args);
         }
         else {
-            App::Options->print_usage($values, \%init_args);
+            App::Options->print_usage($values, $init_args);
         }
         exit($exit_status);
     }
 }
 
-sub import {
-    my ($self, @args) = @_;
-    if ($#args % 2 == 1) {
-        $self->init(@args);
-    }
-}
-
 sub print_usage {
-    shift if ($#_ > -1 && $_[0] eq "App::Options");
-    my ($values, $init_args) = @_;
+    my ($self, $values, $init_args) = @_;
     $values = {} if (!$values);
     $init_args = {} if (!$init_args);
 
@@ -1099,7 +943,7 @@ sub print_usage {
 }
 
 sub print_version {
-    my ($prog_file, $show_version, $values) = @_;
+    my ($self, $prog_file, $show_version, $values) = @_;
     print "Program: $prog_file\n";
     print "(use --version_packages to see version info for specific perl packages)\n";
     my ($module, $package, $version, $full_path);
@@ -1168,6 +1012,195 @@ sub print_version {
             $version = "undef" if (!$version);
             printf("%7s %-20s\n", $version, $package);
             #printf("%7s %-20s %s\n", "", $module, $full_path);
+        }
+    }
+}
+
+sub read_option_files {
+    my ($self, $values, $option_files, $prefix) = @_;
+    my $init_args = $self->{init_args};
+    local(*App::Options::FILE);
+    my ($option_file, $exclude_section, $option, $var, @env_vars, $env_var, $value, $regexp);
+    my ($cond, @cond, $exclude, $heredoc_end);
+    my $debug_options = $values->{debug_options} || 0;
+    while ($#$option_files > -1) {
+        $option_file = shift(@$option_files);
+        if ($option_file =~ m!\$\{prefix\}!) {
+            if ($values->{prefix}) {
+                $option_file =~ s!\$\{prefix\}!$values->{prefix}!;
+            }
+            else {
+                $option_file =~ s!\$\{prefix\}!$prefix!;
+            }
+        }
+        $exclude_section = 0;
+        print STDERR "   Looking for Option File [$option_file]" if ($debug_options);
+        if (open(App::Options::FILE, "< $option_file")) {
+            print STDERR " : Found\n" if ($debug_options);
+            my ($orig_line);
+            while (<App::Options::FILE>) {
+                chomp;
+                $orig_line = $_;
+                # for lines that are like "[regexp]" or even "[regexp] var = value"
+                # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
+                if (s!^\s*\[(.*)\]\s*!!) {
+                    print STDERR "         Checking Section : [$1]\n" if ($debug_options >= 6);
+                    @cond = split(/;/,$1);   # separate the conditions that must be satisfied
+                    $exclude = 0;            # assume the condition allows inclusion (! $exclude)
+                    foreach $cond (@cond) {  # check each condition
+                        if ($cond =~ /^([^=]+)=(.*)$/) {  # i.e. [city=ATL] or [name=/[Ss]tephen/]
+                            $var = $1;
+                            $value = $2;
+                        }
+                        else {              # i.e. [go] matches the program (app) named "go"
+                            $var = "app";
+                            $value = $cond;
+                        }
+                        if ($value =~ m!^/(.*)/$!) {  # variable's value must match the regexp
+                            $regexp = $1;
+                            $exclude = ((defined $values->{$var} ? $values->{$var} : "") !~ /$regexp/) ? 1 : 0;
+                            print STDERR "         Checking Section Condition var=[$var] [$value] matches [$regexp] : result=",
+                                ($exclude ? "[ignore]" : "[use]"), "\n"
+                                if ($debug_options >= 6);
+                        }
+                        elsif ($var eq "app" && ($value eq "" || $value eq "ALL")) {
+                            $exclude = 0;   # "" and "ALL" are special wildcards for the "app" variable
+                            print STDERR "         Checking Section Condition var=[$var] [$value] = ALL : result=",
+                                ($exclude ? "[ignore]" : "[use]"), "\n"
+                                if ($debug_options >= 6);
+                        }
+                        else {  # a variable's value must match exactly
+                            $exclude = ((defined $values->{$var} ? $values->{$var} : "") ne $value) ? 1 : 0;
+                            print STDERR "         Checking Section Condition var=[$var] [$value] = [",
+                                (defined $values->{$var} ? $values->{$var} : ""),
+                                "] : result=",
+                                ($exclude ? "[ignore]" : "[use]"), "\n"
+                                if ($debug_options >= 6);
+                        }
+                        last if ($exclude);
+                    }
+                    s/^#.*$//;               # delete comments
+                    print STDERR "      ", ($exclude ? "[ignore]" : "[use]   "), " $orig_line\n" if ($debug_options >= 5);
+                    if ($_) {
+                        # this is a single-line condition, don't change the $exclude_section flag
+                        next if ($exclude);
+                    }
+                    else {
+                        # this condition pertains to all lines after it
+                        $exclude_section = $exclude;
+                        next;
+                    }
+                }
+                else {
+                    print STDERR "      ", ($exclude_section ? "[ignore]" : "[use]   "), " $orig_line\n" if ($debug_options >= 5);
+                }
+                next if ($exclude_section);
+
+                s/#.*$//;        # delete comments
+                s/^ +//;         # delete leading spaces
+                s/ +$//;         # delete trailing spaces
+                next if (/^$/);  # skip blank lines
+
+                # look for "var = value" (ignore other lines)
+                if (/^([a-zA-Z0-9_.-{}]+)\s*=\s*(.*)/) {  # untainting also happens
+                    $var = $1;
+                    $value = $2;
+
+                    # "here documents": var = <<EOF ... EOF
+                    if ($value =~ /^<<(.*)/) {
+                        $heredoc_end = $1;
+                        $value = "";
+                        while (<App::Options::FILE>) {
+                            last if ($_ =~ /^$heredoc_end\s*$/);
+                            $value .= $_;
+                        }
+                        $heredoc_end = "";
+                    }
+                    # get value from a file
+                    elsif ($value =~ /^<\s*(.+)/ || $value =~ /^(.+)\s*\|$/) {
+                        $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                        if (open(App::Options::FILE2, $value)) {
+                            $value = join("", <App::Options::FILE2>);
+                            close(App::Options::FILE2);
+                        }
+                        else {
+                            $value = "Can't read file [$value] for variable [$var]: $!";
+                        }
+                    }
+                    # get additional line(s) due to continuation chars
+                    elsif ($value =~ s/\\\s*$//) {
+                        while (<App::Options::FILE>) {
+                            if ($_ =~ s/\\\s*[\r\n]*$//) {   # remove trailing newline
+                                s/^\s+//;  # remove leading space when following a line continuation character
+                                $value .= $_;
+                            }
+                            else {
+                                chomp;     # remove trailing newline when following a line continuation character
+                                s/^\s+//;  # remove leading space when following a line continuation character
+                                $value .= $_;
+                                last;
+                            }
+                        }
+                    }
+                    else {
+                        $value =~ s/^"(.*)"$/$1/;  # quoting, var = " hello world " (enables leading/trailing spaces)
+                    }
+
+                    print STDERR "         Var Found in File : var=[$var] value=[$value]\n" if ($debug_options >= 6);
+                    
+                    # only add values which have never been defined before
+                    if ($var =~ /^ENV\{([^{}]+)\}$/) {
+                        $env_var = $1;
+                        $ENV{$env_var} = $value;
+                    }
+                    elsif (!defined $values->{$var}) {
+                        if (!$init_args->{no_env_vars}) {
+                            if ($option && defined $option->{$var} && defined $option->{$var}{env}) {
+                                if ($option->{$var}{env} eq "") {
+                                    @env_vars = ();
+                                }
+                                else {
+                                    @env_vars = split(/[,;]/, $option->{$var}{env});
+                                }
+                            }
+                            else {
+                                @env_vars = ( "APP_" . uc($var) );
+                            }
+                            foreach $env_var (@env_vars) {
+                                if ($env_var && defined $ENV{$env_var}) {
+                                    $value = $ENV{$env_var};
+                                    print STDERR "       Override File Value from Env : var=[$var] value=[$value] from [$env_var] of [@env_vars]\n" if ($debug_options >= 4);
+                                    last;
+                                }
+                            }
+                        }
+                        # do variable substitutions, var = ${prefix}/bin, var = $ENV{PATH}
+                        if (defined $value) {
+                            if ($value =~ /\{.*\}/) {
+                                $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                                $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
+                                print STDERR "         File Var Underwent Substitutions : [$var] = [$value]\n"
+                                    if ($debug_options >= 4);
+                            }
+                            print STDERR "         Var Used : var=[$var] value=[$value]\n" if ($debug_options >= 3);
+                            $values->{$var} = $value;    # save all in %App::options
+                        }
+                    }
+                }
+            }
+            close(App::Options::FILE);
+
+            if ($values->{flush_imports}) {
+                @$option_files = ();  # throw out other files to look for
+                delete $values->{flush_imports};
+            }
+            if ($values->{import}) {
+                unshift(@$option_files, split(/[,; ]+/, $values->{import}));
+                delete $values->{import};
+            }
+        }
+        else {
+            print STDERR "\n" if ($debug_options);
         }
     }
 }
@@ -1602,7 +1635,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 7987 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 10140 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 

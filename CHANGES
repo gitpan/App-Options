@@ -2,6 +2,16 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.03
+ x better use of /\s*/ instead of / */ so that tabs don't catch you off-guard
+ x enable application use of App::Options objects to read additional data structures
+   * $option_processor = App::Options->new(@args);
+   * $option_processor->read_option_files(\%values, [$file]);
+ x allow for subclassing (App::Options::YAML, etc.)
+   * made App::Options object-oriented to allow for subclassing
+   * split read_option_files() method out of the read_options() method (for subclassing)
+ x save the import arguments for later print_usage or later reparsing (as $self->{init_args})
+
 VERSION 1.02
  x ENV{FOO} = x in app.conf sets environment variable "FOO" (i.e. LD_LIBRARY_PATH)
  x added perl_restart option to re-exec() the program so that it picks up a new LD_LIBRARY_PATH
