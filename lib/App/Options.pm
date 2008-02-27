@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 10140 2007-10-30 19:09:10Z spadkins $
+## $Id: Options.pm 10839 2008-02-27 02:56:10Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.03";
+$VERSION = "1.04";
 
 =head1 NAME
 
@@ -475,6 +475,7 @@ sub read_options {
     $prog_dir =~ s!\\!/!g;   # transform to POSIX-compliant (forward slashes)
     $prog_dir =~ s!/$!! if ($prog_dir ne "/");   # remove trailing slash
     $prog_dir =  "." if ($prog_dir eq "");
+    $prog_dir =  $prog_cat . $prog_dir if ($^O =~ /MSWin32/ and $prog_dir =~ m!^/!);
 
     print STDERR "2. Found Directory of Program. catalog=[$prog_cat] dir=[$prog_dir] file=[$prog_file]\n"
         if ($debug_options);
@@ -1635,7 +1636,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 10140 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 10839 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 

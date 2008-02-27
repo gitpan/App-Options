@@ -2,6 +2,9 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.04
+ x Fixed RT Bug #33597: Problem of ignoring drive letter on Win32 filesystem.
+
 VERSION 1.03
  x better use of /\s*/ instead of / */ so that tabs don't catch you off-guard
  x enable application use of App::Options objects to read additional data structures
