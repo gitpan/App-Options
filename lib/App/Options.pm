@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 10839 2008-02-27 02:56:10Z spadkins $
+## $Id: Options.pm 12167 2008-12-16 04:09:28Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.04";
+$VERSION = "1.05";
 
 =head1 NAME
 
@@ -1178,7 +1178,7 @@ sub read_option_files {
                         # do variable substitutions, var = ${prefix}/bin, var = $ENV{PATH}
                         if (defined $value) {
                             if ($value =~ /\{.*\}/) {
-                                $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : "")/eg;
+                                $value =~ s/\$\{([a-zA-Z0-9_\.-]+)\}/(defined $values->{$1} ? $values->{$1} : ($1 eq "prefix" ? $prefix : ""))/eg;
                                 $value =~ s/\$ENV\{([a-zA-Z0-9_\.-]+)\}/(defined $ENV{$1} ? $ENV{$1} : "")/eg;
                                 print STDERR "         File Var Underwent Substitutions : [$var] = [$value]\n"
                                     if ($debug_options >= 4);
@@ -1636,7 +1636,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 10839 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 12167 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 

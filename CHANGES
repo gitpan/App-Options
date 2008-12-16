@@ -2,6 +2,10 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.05
+ x Substitutions of ${prefix} in option files now works even if only defined by assumption
+   This is particularly valuable for portability between environments of CGI scripts and cron scripts.
+
 VERSION 1.04
  x Fixed RT Bug #33597: Problem of ignoring drive letter on Win32 filesystem.
 
