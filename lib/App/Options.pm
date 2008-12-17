@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 12167 2008-12-16 04:09:28Z spadkins $
+## $Id: Options.pm 12180 2008-12-17 18:30:42Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.05";
+$VERSION = "1.06";
 
 =head1 NAME
 
@@ -1041,6 +1041,7 @@ sub read_option_files {
             my ($orig_line);
             while (<App::Options::FILE>) {
                 chomp;
+                s/\r$//;   # remove final CR (for Windows files)
                 $orig_line = $_;
                 # for lines that are like "[regexp]" or even "[regexp] var = value"
                 # or "[value;var=value]" or "[/regexp/;var1=value1;var2=/regexp2/]"
@@ -1636,7 +1637,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 12167 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 12180 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 

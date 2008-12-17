@@ -2,6 +2,9 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.06
+ x Remove trailing \r from option files (for Windows-edited .conf files)
+
 VERSION 1.05
  x Substitutions of ${prefix} in option files now works even if only defined by assumption
    This is particularly valuable for portability between environments of CGI scripts and cron scripts.
