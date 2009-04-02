@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 12180 2008-12-17 18:30:42Z spadkins $
+## $Id: Options.pm 12670 2009-04-02 18:20:31Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.06";
+$VERSION = "1.07";
 
 =head1 NAME
 
@@ -1099,14 +1099,23 @@ sub read_option_files {
                 next if ($exclude_section);
 
                 s/#.*$//;        # delete comments
-                s/^ +//;         # delete leading spaces
-                s/ +$//;         # delete trailing spaces
+                s/^\s+//;         # delete leading spaces
+                s/\s+$//;         # delete trailing spaces
                 next if (/^$/);  # skip blank lines
 
                 # look for "var = value" (ignore other lines)
-                if (/^([a-zA-Z0-9_.-{}]+)\s*=\s*(.*)/) {  # untainting also happens
+                if (/^([^\s=]+)\s*=\s*(.*)/) {  # untainting also happens
                     $var = $1;
                     $value = $2;
+
+                    if ($var eq "perl_restart" && $value && $value ne "1") {
+                        foreach my $env_var (split(/,/,$value)) {
+                            if (!$ENV{$env_var}) {
+                                $value = 1;
+                                last;
+                            }
+                        }
+                    }
 
                     # "here documents": var = <<EOF ... EOF
                     if ($value =~ /^<<(.*)/) {
@@ -1637,7 +1646,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 12180 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 12670 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 

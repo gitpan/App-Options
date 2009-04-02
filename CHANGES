@@ -2,6 +2,12 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.07
+ x Allow dashes ("-") as a variable name (i.e. foo-bar = 1).
+   In doing this, I actually allow that any characters other than spaces/tabs/= can make up the variable name
+ x Trim leading and trailing tabs (as well as spaces) from the line
+
+VERSION 1.05
 VERSION 1.06
  x Remove trailing \r from option files (for Windows-edited .conf files)
 

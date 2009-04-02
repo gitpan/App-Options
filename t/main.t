@@ -123,6 +123,7 @@ ok(! defined $App::options{hosttest}, "host not named xyzzy3");
 # $ENV{X} variable substitution tests
 ok($App::options{envtest} eq "xyzzy", "\$ENV{X} variable substitution worked");
 ok($App::options{plugh} eq "twisty passages", "auto-import of APP_ env vars worked");
+ok(defined $App::options{"foo-bar"} && $App::options{"foo-bar"} eq "1", "foo-bar = 1 (dash in option key)");
 
 exit 0;
 
