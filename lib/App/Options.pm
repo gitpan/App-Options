@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 12670 2009-04-02 18:20:31Z spadkins $
+## $Id: Options.pm 14348 2010-08-28 21:37:13Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.07";
+$VERSION = "1.1";
 
 =head1 NAME
 
@@ -22,7 +22,8 @@ App::Options - Combine command line options, environment vars, and option file v
 
 =head1 SYNOPSIS
 
-    #!/usr/local/bin/perl
+    #!/usr/bin/perl -w
+    use strict;
 
     use App::Options;   # reads option values into %App::options by default
 
@@ -35,6 +36,7 @@ App::Options - Combine command line options, environment vars, and option file v
   Get help from the command line (assuming program is named "prog") ...
 
     prog -?
+    prog --help
 
   Option values may be provided on the command line, in environment
   variables, and option files.  (i.e. $ENV{APP_DBNAME} would set
@@ -43,6 +45,7 @@ App::Options - Combine command line options, environment vars, and option file v
   The "dbname" and other options could also be set in one of the
   following configuration files
 
+    /etc/app/policy.conf
     $HOME/.app/prog.conf
     $HOME/.app/app.conf
     $PROGDIR/prog.conf
@@ -134,8 +137,7 @@ without any knowledge or use of other elements of the P5EE project.
 
 See the P5EE web sites for more information on the P5EE project.
 
-    http://www.officevision.com/pub/p5ee
-    http://p5ee.perl.org
+    http://www.officevision.com/pub/p5ee/index.html
 
 =head1 API REFERENCE: Methods
 
@@ -199,12 +201,12 @@ See the P5EE web sites for more information on the P5EE project.
         options => [ "option_file", "prefix", "app",
                      "perlinc", "debug_options", "import", ],
         option => {
-            option_file   => "~/.app/app.conf",         # set default
-            app           => "default=app;type=string", # default & type
-            prefix        => "type=string;required;env=PREFIX",
+            option_file   => { default => "~/.app/app.conf" },         # set default
+            app           => { default => "app", type => "string" }, # default & type
+            prefix        => { type => "string", required => 1; env => "PREFIX" },
             perlinc       => undef,         # no default
-            debug_options => "type=int",
-            import        => "type=string",
+            debug_options => { type => "int" },
+            import        => { type => "string" },
             flush_imports => 1,
         },
         no_cmd_args => 1,
@@ -255,6 +257,19 @@ option variable using the "option" arg above is as follows.
     env - a list of semicolon-separated environment variable names
         to be used to find the value instead of "APP_{VARNAME}".
     description - printed next to the option in the "usage" page
+    secure - identifies an option as being "secure" (i.e. a password)
+        and that it should never be printed in plain text in a help
+        message (-?).  All options which end in "pass", "passwd", or
+        "password" are also assumed to be secure unless a secure => 0
+        setting exists. If the value of the "secure" attribute is greater
+        than 1, a heightened security level is enforced: 2=ensure that
+        the value can never be supplied on a command line or from the
+        environment but only from a file that only the user running the
+        program has read/write access to.  This value will also never be
+        read from the environment or the command line because these are
+        visible to other users.  If the security_policy_level variable
+        is set, any true value for the "secure" attribute will result in
+        the value being set to the "security_policy_level" value.
     value_description - printed within angle brackets ("<>") in the
         "usage" page as the description of the option value
         (i.e. --option_name=<value_description>)
@@ -317,9 +332,18 @@ The special options are as follows.
 
     flush_imports - flush all pending imported option files.
 
+    security_policy_level - When set, this enforces that whenever secure
+       attributes are applied, they are set to the same level. When set
+       0, all of the security features are disabled (passwords can be
+       viewed with "--security_policy_level=0 --help").  When set to 2,
+       all secure options can only be read from files which do not have
+       read/write permission by any other user except the one running the
+       program.
+
 =cut
 
 my ($default_option_processor);  # a reference to the singleton App::Options object that parsed the command line
+my (%path_is_secure);
 
 # This translates the procedural App::Options::import() into the class method App::Options->_import() (for subclassing)
 sub import {
@@ -376,32 +400,48 @@ sub read_options {
     # populate "option" (the information about each option!)
     #######################################################################
 
-    my ($var, $value, @vars, $option);
+    my ($var, $value, @vars);
     my $init_args = $self->{init_args};
-    $option = $init_args->{option};
+    my $option_defs = $init_args->{option} || {};
+    my (%secure_options, %option_source);
 
-    if ($option) {
+    if ($option_defs) {
         croak "App::Options->read_options(): 'option' arg must be a hash reference"
-            if (ref($option) ne "HASH");
+            if (ref($option_defs) ne "HASH");
 
-        my (@args, $hash, $arg);
-        foreach $var (keys %$option) {
-            $value = $option->{$var};
+        my (@args, $option_def, $arg);
+        # Convert archaic forms where everything is packed in a scalar, to the newer,
+        # more verbose form where attributes of an option are in a hashref.
+        foreach $var (keys %$option_defs) {
+            $value = $option_defs->{$var};
             if (ref($value) eq "") {
-                $hash = {};
-                $option->{$var} = $hash;
+                $option_def = {};
+                $option_defs->{$var} = $option_def;
                 @args = split(/ *; */,$value);
                 foreach $arg (@args) {
                     if ($arg =~ /^([^=]+)=(.*)$/) {
-                        $hash->{$1} = $2;
+                        $option_def->{$1} = $2;
                     }
-                    elsif (! defined $hash->{default}) {
-                        $hash->{default} = $arg;
+                    elsif (! defined $option_def->{default}) {
+                        $option_def->{default} = $arg;
                     }
                     else {
-                        $hash->{$arg} = 1;
+                        $option_def->{$arg} = 1;
                     }
                 }
+            }
+            else {
+                $option_def = $value;
+            }
+            if (! defined $option_def->{secure} && $var =~ /(pass|password|passwd)$/) {
+                $option_def->{secure} = 1;
+            }
+        }
+    }
+    if ($init_args->{options}) {
+        foreach $var (@{$init_args->{options}}) {
+            if (! defined $option_defs->{$var}{secure} && $var =~ /(pass|password|passwd)$/) {
+                $option_defs->{$var}{secure} = 1;
             }
         }
     }
@@ -432,6 +472,7 @@ sub read_options {
     my $debug_options = $values->{debug_options} || 0;
     my $show_help = 0;
     my $show_version = 0;
+    my $exit_status = -1;
 
     if (! $init_args->{no_cmd_args}) {
         my $options = $self->{options};
@@ -439,7 +480,12 @@ sub read_options {
             $var = $1;
             $value = ($2 eq "") ? 1 : $3;
             push(@$options, shift @ARGV);
+            if ($option_defs->{$var} && $option_defs->{$var}{secure} && defined $values->{security_policy_level} && $values->{security_policy_level} >= 2) {
+                $exit_status = 1;
+                print "Error: \"$var\" may not be supplied on the command line because it is a secure option.\n";
+            }
             $values->{$var} = $value;
+            $option_source{$var} = "CMDLINE";
         }
         if ($#ARGV >= 0 && $ARGV[0] eq "--") {
             shift @ARGV;
@@ -476,9 +522,6 @@ sub read_options {
     $prog_dir =~ s!/$!! if ($prog_dir ne "/");   # remove trailing slash
     $prog_dir =  "." if ($prog_dir eq "");
     $prog_dir =  $prog_cat . $prog_dir if ($^O =~ /MSWin32/ and $prog_dir =~ m!^/!);
-
-    print STDERR "2. Found Directory of Program. catalog=[$prog_cat] dir=[$prog_dir] file=[$prog_file]\n"
-        if ($debug_options);
 
     #################################################################
     # 3. guess the "prefix" directory for the entire
@@ -554,6 +597,7 @@ sub read_options {
         $values->{app} = $app;
     }
     print STDERR "4. Set app variable. app=[$app] origin=[$app_origin]\n" if ($debug_options);
+    #print STDERR "04 option_defs [", join("|", sort keys %$option_defs), "]\n";
 
     my ($env_var, @env_vars, $regexp);
     if (! $init_args->{no_option_file}) {
@@ -561,6 +605,7 @@ sub read_options {
         # 5. Define the standard places to look for an option file
         #################################################################
         my @option_files = ();
+        push(@option_files, "/etc/app/policy.conf");
         push(@option_files, $values->{option_file}) if ($values->{option_file});
         push(@option_files, "$ENV{HOME}/.app/$app.conf") if ($ENV{HOME} && $app ne "app");
         push(@option_files, "$ENV{HOME}/.app/app.conf") if ($ENV{HOME});
@@ -578,14 +623,15 @@ sub read_options {
         #################################################################
         print STDERR "5. Scanning Option Files\n" if ($debug_options);
 
-        $self->read_option_files($values, \@option_files, $prefix);
+        $self->read_option_files($values, \@option_files, $prefix, $option_defs);
 
         $debug_options = $values->{debug_options} || 0;
     }
     else {
         print STDERR "5. Skip Option File Processing\n" if ($debug_options);
     }
-    if ($values->{perl_restart} && !$ENV{PERL_RESTART}) {
+    #print STDERR "05 option_defs [", join("|", sort keys %$option_defs), "]\n" if ($prefix eq "/usr");
+    if ($values->{perl_restart} && !$ENV{MOD_PERL} && !$ENV{PERL_RESTART}) {
         $ENV{PERL_RESTART} = 1;
         exec($^X, $0, @{$self->{argv}});
     }
@@ -602,8 +648,8 @@ sub read_options {
             push(@vars, @{$init_args->{options}});
         }
 
-        if ($option) {
-            push(@vars, (sort keys %$option));
+        if ($option_defs) {
+            push(@vars, (sort keys %$option_defs));
         }
 
         print STDERR "6. Scanning for Environment Variables.\n" if ($debug_options);
@@ -612,12 +658,12 @@ sub read_options {
             if (!defined $values->{$var}) {
                 $value = undef;
                 if (!$init_args->{no_env_vars}) {
-                    if ($option && defined $option->{$var}{env}) {
-                        if ($option->{$var}{env} eq "") {
+                    if ($option_defs && defined $option_defs->{$var}{env}) {
+                        if ($option_defs->{$var}{env} eq "") {
                             @env_vars = ();
                         }
                         else {
-                            @env_vars = split(/[,;]/, $option->{$var}{env});
+                            @env_vars = split(/[,;]/, $option_defs->{$var}{env});
                         }
                     }
                     else {
@@ -645,6 +691,7 @@ sub read_options {
                             if ($debug_options >= 3);
                     }
                     $values->{$var} = $value;    # save all in %App::options
+                    $option_source{$var} = "ENV";
                 }
             }
         }
@@ -654,7 +701,12 @@ sub read_options {
             $var = lc($env_var);
             $var =~ s/^app_//;
             if (! defined $values->{$var}) {
+                if ($option_defs->{$var} && $option_defs->{$var}{secure} && defined $values->{security_policy_level} && $values->{security_policy_level} >= 2) {
+                    $exit_status = 1;
+                    print "Error: \"$var\" may not be supplied from the environment ($env_var) because it is a secure option.\n";
+                }
                 $values->{$var} = $ENV{$env_var};
+                $option_source{$var} = "ENV";
                 print STDERR "         Env Var [$var] = [$value] from [$env_var] (assumed).\n"
                     if ($debug_options >= 3);
             }
@@ -664,6 +716,7 @@ sub read_options {
     else {
         print STDERR "6. Skipped Environment Variable Processing\n" if ($debug_options);
     }
+    #print STDERR "06 option_defs [", join("|", sort keys %$option_defs), "]\n" if ($prefix eq "/usr");
 
     #################################################################
     # 7. establish the definitive (not inferred) $prefix
@@ -681,19 +734,25 @@ sub read_options {
         $values->{prefix} = $prefix;
         print STDERR "7. prefix Made Definitive [$prefix]\n" if ($debug_options);
     }
+    #print STDERR "07 option_defs [", join("|", sort keys %$option_defs), "]\n" if ($prefix eq "/usr");
 
     #################################################################
     # 8. set defaults
     #################################################################
-    if ($option) {
+    if ($option_defs) {
         @vars = (defined $init_args->{options}) ? @{$init_args->{options}} : ();
-        push(@vars, (sort keys %$option));
+        push(@vars, (sort keys %$option_defs));
 
         print STDERR "8. Set Defaults.\n" if ($debug_options);
 
         foreach $var (@vars) {
             if (!defined $values->{$var}) {
-                $value = $option->{$var}{default};
+                if (defined $option_defs->{$var} && defined $option_defs->{$var}{default} && $option_defs->{$var}{secure} &&
+                    defined $values->{security_policy_level} && $values->{security_policy_level} >= 2) {
+                    $exit_status = 1;
+                    print "Error: \"$var\" may not be supplied as a program default because it is a secure option.\n";
+                }
+                $value = $option_defs->{$var}{default};
                 # do variable substitutions, var = ${prefix}/bin, var = $ENV{PATH}
                 if (defined $value) {
                     if ($value =~ /\{.*\}/) {
@@ -703,6 +762,7 @@ sub read_options {
                             if ($debug_options >= 4);
                     }
                     $values->{$var} = $value;    # save all in %App::options
+                    $option_source{$var} = "DEFAULT";
                     print STDERR "         Default Var [$var] = [$value]\n" if ($debug_options >= 3);
                 }
             }
@@ -711,6 +771,7 @@ sub read_options {
     else {
         print STDERR "8. Skipped Defaults (no option defaults defined)\n" if ($debug_options);
     }
+    #print STDERR "08 option_defs [", join("|", sort keys %$option_defs), "]\n" if ($prefix eq "/usr");
 
     #################################################################
     # 9. add "perlinc" directories to @INC, OR
@@ -768,15 +829,26 @@ sub read_options {
             if ($^V) {
                 my $perlversion = sprintf("%vd", $^V);
                 unshift(@INC, $libdir);
-                unshift(@INC, "$libdir/perl5/site_perl/$perlversion");  # site_perl goes first!
-                unshift(@INC, "$libdir/perl5/$perlversion");
+                if (-d "$libdir/perl5") {
+                    unshift(@INC, "$libdir/perl5/site_perl/$perlversion");  # site_perl goes first!
+                    unshift(@INC, "$libdir/perl5/$perlversion");
+                }
+                elsif (-d "$libdir/perl") {
+                    unshift(@INC, "$libdir/perl/site_perl/$perlversion");   # site_perl goes first!
+                    unshift(@INC, "$libdir/perl/$perlversion");
+                }
+                if (-d "$prefix/share/perl") {
+                    unshift(@INC, "$prefix/share/perl/site_perl/$perlversion");   # site_perl goes first!
+                    unshift(@INC, "$prefix/share/perl/$perlversion");
+                }
             }
         }
         if ($debug_options >= 2) {
-            print STDERR "9. Standard Directories Added to \@INC\n   ",
+            print STDERR "9. Standard Directories Added to \@INC (libdir_found=$libdir_found)\n   ",
                 join("\n   ", @INC), "\n";
         }
     }
+    #print STDERR "09 option_defs [", join("|", sort keys %$option_defs), "]\n" if ($prefix eq "/usr");
 
     #################################################################
     # 10. print stuff out for options debugging
@@ -807,10 +879,10 @@ sub read_options {
     # 12. perform validations, print help, and exit
     #################################################################
 
-    my $exit_status = -1;
     if ($show_help) {
         $exit_status = 0;
     }
+    #print STDERR "12 option_defs [", join("|", sort keys %$option_defs), "]\n" if ($prefix eq "/usr");
 
     #################################################################
     # These are the actual Perl regular expressions which match
@@ -823,10 +895,10 @@ sub read_options {
     # 0x[0-9A-Fa-f](_?[0-9A-Fa-f])*
 
     my ($type);
-    if ($option) {
-        @vars = (sort keys %$option);
+    if ($option_defs) {
+        @vars = (sort keys %$option_defs);
         foreach $var (@vars) {
-            $type = $option->{$var}{type};
+            $type = $option_defs->{$var}{type};
             next if (!$type);  # nothing to validate against
             $value = $values->{$var};
             next if (! defined $value);
@@ -879,12 +951,13 @@ sub read_options {
             }
         }
         foreach $var (@vars) {
-            next if (!$option->{$var}{required} || defined $values->{$var});
+            next if (!$option_defs->{$var}{required} || defined $values->{$var});
             $exit_status = 1;
             print "Error: \"$var\" is a required option but is not defined\n";
         }
     }
 
+    #print STDERR "13 option_defs [", join("|", sort keys %$option_defs), "]\n" if ($prefix eq "/usr");
     if ($exit_status >= 0) {
         if ($init_args->{print_usage}) {
             &{$init_args->{print_usage}}($values, $init_args);
@@ -915,6 +988,7 @@ sub print_usage {
     $show_all = $init_args->{show_all};
     $show_all = $values->{show_all} if (defined $values->{show_all});
     $show_all = 1 if (!defined $show_all && !defined $init_args->{option} && !defined $init_args->{options});
+    #print "DEBUG: show_all=[$show_all] option=[$init_args->{option}] options=[$init_args->{options}]\n" if ($values->{foo});
     if ($init_args->{options}) {
         @vars = @{$init_args->{options}};
     }
@@ -924,23 +998,28 @@ sub print_usage {
     if ($show_all) {
         push(@vars, (sort keys %$values));
     }
-    my ($var, $value, $type, $desc, $option);
-    my ($var_str, $value_str, $type_str, $desc_str, $val_desc);
-    $option = $init_args->{option} || {};
+    my ($var, $value, $type, $desc, $option_defs);
+    my ($var_str, $value_str, $type_str, $desc_str, $val_desc, $secure);
+    $option_defs = $init_args->{option} || {};
     foreach $var (@vars) {
         next if ($option_seen{$var});
         $option_seen{$var} = 1;
         next if ($var eq "?" || $var eq "help");
-        $value = $values->{$var};
-        $type  = $option->{$var}{type} || "";
-        $desc  = $option->{$var}{description} || "";
-        $val_desc  = $option->{$var}{value_description} || "";
+        $value  = $values->{$var};
+        $type   = $option_defs->{$var}{type} || "";
+        $desc   = $option_defs->{$var}{description} || "";
+        $secure = $option_defs->{$var}{secure};
+        $secure = 1 if (! defined $secure && $var =~ /(pass|password|passwd)$/);
+        $secure = $values->{security_policy_level} if (defined $secure && defined $values->{security_policy_level});
+        $val_desc  = $option_defs->{$var}{value_description} || "";
         $var_str   = ($type eq "boolean") ? $var : ($val_desc ? "$var=<$val_desc>" : "$var=<value>");
-        $value_str = (defined $value) ? $value : "undef";
+        $value_str = (defined $value) ? ($secure ? "********" : $value) : "undef";
         $type_str  = ($type) ? " ($type)" : "";
         $desc_str  = ($desc) ? " $desc"   : "";
+        $desc_str  =~ s/%/%%/g;
         printf STDERR "       --%-32s [%s]$type_str$desc_str\n", $var_str, $value_str;
     }
+    #print STDERR "PU option_defs [", join("|", sort keys %$option_defs), "]\n" if ($values->{prefix} eq "/usr");
 }
 
 sub print_version {
@@ -1018,12 +1097,13 @@ sub print_version {
 }
 
 sub read_option_files {
-    my ($self, $values, $option_files, $prefix) = @_;
+    my ($self, $values, $option_files, $prefix, $option_defs) = @_;
     my $init_args = $self->{init_args};
     local(*App::Options::FILE);
-    my ($option_file, $exclude_section, $option, $var, @env_vars, $env_var, $value, $regexp);
+    my ($option_file, $exclude_section, $var, @env_vars, $env_var, $value, $regexp);
     my ($cond, @cond, $exclude, $heredoc_end);
     my $debug_options = $values->{debug_options} || 0;
+    my $is_mod_perl = $ENV{MOD_PERL};
     while ($#$option_files > -1) {
         $option_file = shift(@$option_files);
         if ($option_file =~ m!\$\{prefix\}!) {
@@ -1108,11 +1188,13 @@ sub read_option_files {
                     $var = $1;
                     $value = $2;
 
-                    if ($var eq "perl_restart" && $value && $value ne "1") {
-                        foreach my $env_var (split(/,/,$value)) {
-                            if (!$ENV{$env_var}) {
-                                $value = 1;
-                                last;
+                    if (!$is_mod_perl) {
+                        if ($var eq "perl_restart" && $value && $value ne "1") {
+                            foreach my $env_var (split(/,/,$value)) {
+                                if (!$ENV{$env_var}) {
+                                    $value = 1;
+                                    last;
+                                }
                             }
                         }
                     }
@@ -1166,12 +1248,12 @@ sub read_option_files {
                     }
                     elsif (!defined $values->{$var}) {
                         if (!$init_args->{no_env_vars}) {
-                            if ($option && defined $option->{$var} && defined $option->{$var}{env}) {
-                                if ($option->{$var}{env} eq "") {
+                            if ($option_defs && defined $option_defs->{$var} && defined $option_defs->{$var}{env}) {
+                                if ($option_defs->{$var}{env} eq "") {
                                     @env_vars = ();
                                 }
                                 else {
-                                    @env_vars = split(/[,;]/, $option->{$var}{env});
+                                    @env_vars = split(/[,;]/, $option_defs->{$var}{env});
                                 }
                             }
                             else {
@@ -1194,6 +1276,13 @@ sub read_option_files {
                                     if ($debug_options >= 4);
                             }
                             print STDERR "         Var Used : var=[$var] value=[$value]\n" if ($debug_options >= 3);
+                            if ($option_defs->{$var} && $option_defs->{$var}{secure} &&
+                                defined $values->{security_policy_level} && $values->{security_policy_level} >= 2 && !&file_is_secure($option_file)) {
+                                print "Error: \"$var\" may not be supplied from an insecure file because it is a secure option.\n";
+                                print "       File: [$option_file]\n";
+                                print "       (The file and all of its parent directories must be readable/writable only by the user running the program.)\n";
+                                exit(1);
+                            }
                             $values->{$var} = $value;    # save all in %App::options
                         }
                     }
@@ -1214,6 +1303,53 @@ sub read_option_files {
             print STDERR "\n" if ($debug_options);
         }
     }
+}
+
+sub file_is_secure {
+    my ($file) = @_;
+    my ($secure, $dir);
+    my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks);
+    if ($^O =~ /MSWin32/) {
+        $secure = 1; # say it is without really checking
+    }
+    else {
+        $secure = $path_is_secure{$file};
+        if (!defined $secure) {
+            ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($file);
+            if (!($mode & 0400)) {
+                $secure = 0;
+                print "Error: Option file is not secure because it is not readable by the owner.\n";
+            }
+            elsif ($mode & 0077) {
+                $secure = 0;
+                print "Error: Option file is not secure because it is readable/writable by users other than the owner.\n";
+            }
+            else {
+                $dir =~ s!/?[^/]+$!!;
+                while ($dir && $secure) {
+                    $secure = $path_is_secure{$file};
+                    if (!defined $secure) {
+                        ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat("$dir/.");  # navigate symlink to the directory
+                        if ($uid >= 100 && $uid != $>) {
+                            $secure = 0;
+                            print "Error: Option file is not secure because a parent directory is owned by a different user.\n";
+                            print "       Dir=[$dir]\n";
+                        }
+                        elsif ($mode & 0077) {
+                            $secure = 0;
+                            print "Error: Option file is not secure because a parent directory is readable/writable by other users.\n";
+                            print "       Dir=[$dir]\n";
+                        }
+                        $path_is_secure{$file} = 1;  # I don't know this yet, but if we ever get around to asking again, it means that the directory was secure.
+                    }
+                    $dir =~ s!/?[^/]+$!!;
+                }
+                $secure = 1 if (!defined $secure);
+            }
+            $path_is_secure{$file} = $secure;
+        }
+    }
+    return($secure);
 }
 
 =head1 LOGIC FLOW: OPTION PROCESSING DETAILS
@@ -1646,7 +1782,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 12670 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 14348 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 
@@ -1794,9 +1930,9 @@ in a customer table.
 
 We call this program "listcust".
 
-    #!/usr/local/bin/perl
-    use App::Options;
+    #!/usr/bin/perl -e
     use strict;
+    use App::Options;
     use DBI;
     my $dsn = "dbi:$App::options{dbdriver}:database=$App::options{dbname}";
     my $dbh = DBI->connect($dsn, $App::options{dbuser}, $App::options{dbpass});
@@ -1940,6 +2076,8 @@ print in alphabetical order.)
                 description => "database password",
                 env => "",  # disable env for password (insecure)
                 required => 1,
+                secure => 1,   # FYI. This is inferred by the fact that "dbpass"
+                               # ends in "pass", so it is not necessary.
             },
             first_name => {
                 description => "portion of customer's first name",

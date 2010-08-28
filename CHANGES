@@ -2,12 +2,21 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.1
+ x Supports the "secure" option attribute. (Also, all options which end in "pass" or "password"
+   are assumed to be secure.) The value is a security level: 1=[don't print the value in a help screen].
+   2=[ensure that the value can never be supplied on a command line or from the environment but
+      only from a file that only the user running the program has read/write access to]
+
 VERSION 1.07
+ x Automagically add $PREFIX/lib/perl5 to @INC (only if it exists), else $PREFIX/lib/perl
+   Also check $PREFIX/share/perl and add it to @INC if it exists.
+   Surprisingly, $PREFIX/share/perl and $PREFIX/lib/perl seem to be the directories created
+   and used under Ubuntu 8.04's perl.
  x Allow dashes ("-") as a variable name (i.e. foo-bar = 1).
    In doing this, I actually allow that any characters other than spaces/tabs/= can make up the variable name
  x Trim leading and trailing tabs (as well as spaces) from the line
 
-VERSION 1.05
 VERSION 1.06
  x Remove trailing \r from option files (for Windows-edited .conf files)
 

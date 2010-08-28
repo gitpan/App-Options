@@ -1,6 +1,6 @@
 
 ######################################################################
-## File: $Id: Makefile.PL 7990 2006-10-27 18:40:09Z spadkins $
+## File: $Id: Makefile.PL 13875 2010-03-26 17:22:46Z spadkins $
 ######################################################################
 
 use ExtUtils::MakeMaker;
@@ -9,6 +9,7 @@ use ExtUtils::MakeMaker;
 
 my @programs = (
     "bin/prefix",
+    "bin/prefixadmin",
 );
 
 %opts = (

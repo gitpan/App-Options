@@ -1,4 +1,4 @@
-#!/usr/local/bin/perl -w
+#!/usr/bin/perl -w
 
 BEGIN {
     $ENV{VAR10} = "value10";
