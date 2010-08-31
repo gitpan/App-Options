@@ -5,6 +5,7 @@ META.yml
 README
 TODO
 bin/prefix
+bin/prefixadmin
 lib/App/Options.pm
 t/app.conf
 t/main.t
