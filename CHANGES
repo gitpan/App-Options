@@ -2,6 +2,13 @@
 # CHANGE LOG
 #############################################################################
 
+VERSION 1.12
+ x Added a copyright statement at the request of a Debian administrator.
+   https://rt.cpan.org/Public/Bug/Display.html?id=62017
+
+VERSION 1.11
+ x Added prefixadmin to the MANIFEST
+
 VERSION 1.1
  x Supports the "secure" option attribute. (Also, all options which end in "pass" or "password"
    are assumed to be secure.) The value is a security level: 1=[don't print the value in a help screen].

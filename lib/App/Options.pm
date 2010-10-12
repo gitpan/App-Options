@@ -1,6 +1,6 @@
 
 #############################################################################
-## $Id: Options.pm 14348 2010-08-28 21:37:13Z spadkins $
+## $Id: Options.pm 14478 2010-10-12 15:49:12Z spadkins $
 #############################################################################
 
 package App::Options;
@@ -14,7 +14,7 @@ use Cwd 'abs_path';
 use File::Spec;
 use Config;
 
-$VERSION = "1.11";
+$VERSION = "1.12";
 
 =head1 NAME
 
@@ -532,7 +532,6 @@ sub read_options {
     my $prefix_origin = "command line";
 
     # it can be set in environment.
-    # This is the preferred way for Registry and PerlRun webapps.
     if (!$prefix && $ENV{PREFIX}) {
         $prefix = $ENV{PREFIX};
         $prefix_origin = "environment";
@@ -572,28 +571,7 @@ sub read_options {
     my $app = $values->{app};
     my $app_origin = "command line";
     if (!$app) {
-        my $path_info = $ENV{PATH_INFO} || "";
-        $path_info =~ s!/+$!!;    # strip off trailing slashes ("/")
-        if ($path_info && $path_info =~ m!^/([^/]+)!) {
-            my $path_info_app = $1;  # first part of PATH_INFO (without slashes)
-            if ($ENV{HOME} && -f "$ENV{HOME}/.app/$path_info_app.conf") {
-                $app = $path_info_app;
-                $app_origin = "PATH_INFO=$path_info matches $ENV{HOME}/.app/$path_info_app.conf";
-            }
-            elsif (-f "$prog_dir/$path_info_app.conf") {
-                $app = $path_info_app;
-                $app_origin = "PATH_INFO=$path_info matches $prog_dir/$path_info_app.conf";
-            }
-            elsif (-f "$prefix/etc/app/$path_info_app.conf") {
-                $app = $path_info_app;
-                $app_origin = "PATH_INFO=$path_info matches $prefix/etc/app/$path_info_app.conf";
-            }
-        }
-        if (!$app) {
-            $app = $prog_file;    # start with the full program name
-            $app =~ s/\.[^.]+$//; # strip off trailing file type (i.e. ".pl")
-            $app_origin = "program name ($0)";
-        }
+        ($app, $app_origin) = App::Options->determine_app($prefix, $prog_dir, $prog_file, $ENV{PATH_INFO}, $ENV{HOME});
         $values->{app} = $app;
     }
     print STDERR "4. Set app variable. app=[$app] origin=[$app_origin]\n" if ($debug_options);
@@ -966,6 +944,40 @@ sub read_options {
             App::Options->print_usage($values, $init_args);
         }
         exit($exit_status);
+    }
+}
+
+# ($app, $app_origin) = App::Options->determine_app($prefix, $prog_dir, $prog_file, $ENV{PATH_INFO}, $ENV{HOME});
+sub determine_app {
+    my ($class, $prefix, $prog_dir, $prog_file, $path_info, $home_dir) = @_;
+    my ($app, $app_origin);
+    $path_info ||= "";
+    $path_info =~ s!/+$!!;    # strip off trailing slashes ("/")
+    if ($path_info && $path_info =~ m!^/([^/]+)!) {
+        my $path_info_app = $1;  # first part of PATH_INFO (without slashes)
+        if ($home_dir && -f "$home_dir/.app/$path_info_app.conf") {
+            $app = $path_info_app;
+            $app_origin = "PATH_INFO=$path_info matches $home_dir/.app/$path_info_app.conf";
+        }
+        elsif (-f "$prog_dir/$path_info_app.conf") {
+            $app = $path_info_app;
+            $app_origin = "PATH_INFO=$path_info matches $prog_dir/$path_info_app.conf";
+        }
+        elsif (-f "$prefix/etc/app/$path_info_app.conf") {
+            $app = $path_info_app;
+            $app_origin = "PATH_INFO=$path_info matches $prefix/etc/app/$path_info_app.conf";
+        }
+    }
+    if (!$app) {
+        $app = $prog_file;    # start with the full program name
+        $app =~ s/\.[^.]+$//; # strip off trailing file type (i.e. ".pl")
+        $app_origin = "program name ($0)";
+    }
+    if (wantarray) {
+        return($app, $app_origin);
+    }
+    else {
+        return($app);
     }
 }
 
@@ -1782,7 +1794,7 @@ like the following.
 
  #!/usr/bin/perl
  BEGIN {
-   $VERSION = do { my @r=(q$Revision: 14348 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
+   $VERSION = do { my @r=(q$Revision: 14478 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r};
  }
  use App::Options;
 
@@ -2176,6 +2188,7 @@ I welcome all feedback, bug reports, and feature requests.
 
 =head1 ACKNOWLEDGEMENTS
 
+ * (c) 2010 Stephen Adkins
  * Author:  Stephen Adkins <spadkins@gmail.com>
  * License: This is free software. It is licensed under the same terms as Perl itself.
 
